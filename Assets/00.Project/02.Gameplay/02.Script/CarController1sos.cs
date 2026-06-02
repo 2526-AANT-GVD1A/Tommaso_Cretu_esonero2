@@ -246,6 +246,7 @@ namespace ArcadeKart.Core
         private float currentDriftYaw;
         private RaycastHit groundHit;
         private float lastGroundedTime;
+        private bool hasGroundContactThisFrame;
 
         private void UpdateGrounded()
         {
@@ -258,6 +259,8 @@ namespace ArcadeKart.Core
                 groundLayer,
                 QueryTriggerInteraction.Ignore
             );
+
+            hasGroundContactThisFrame = hitGround;
 
             if (hitGround)
                 lastGroundedTime = Time.time;
@@ -275,16 +278,23 @@ namespace ArcadeKart.Core
 
         private void ApplySuspension()
         {
-            if (!IsGrounded)
+            if (!hasGroundContactThisFrame)
                 return;
 
-            float compression = rideHeight - groundHit.distance;
-            float springForce = compression * suspensionStrength;
+            float compression = Mathf.Clamp(rideHeight - groundHit.distance, 0f, rideHeight);
 
+            if (compression <= 0f)
+                return;
+
+            float springForce = compression * suspensionStrength;
             float verticalVelocity = Vector3.Dot(rb.linearVelocity, Vector3.up);
             float dampingForce = -verticalVelocity * suspensionDamping;
 
             float totalForce = springForce + dampingForce;
+
+            if (totalForce <= 0f)
+                return;
+
             rb.AddForce(Vector3.up * totalForce, ForceMode.Acceleration);
         }
 

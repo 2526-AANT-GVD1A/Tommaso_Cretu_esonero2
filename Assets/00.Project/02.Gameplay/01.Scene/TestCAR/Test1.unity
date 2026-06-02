@@ -560,13 +560,15 @@ MonoBehaviour:
   driftVisualYawDegrees: 25
   driftVisualLerpSpeed: 8
   gravity: 30
-  airControl: 0
-  groundCheckDistance: 1.5
+  airControl: 0.346
+  groundCheckDistance: 1
+  groundCheckRadius: 0.35
   groundCheckOrigin: {fileID: 1609855780}
   groundLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  rideHeight: 1.7
+  groundedGraceTime: 0.08
+  rideHeight: 1
   suspensionStrength: 90
   suspensionDamping: 12
   frontLeftGroundProbe: {fileID: 1583063709}
