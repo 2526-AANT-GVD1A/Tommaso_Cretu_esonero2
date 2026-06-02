@@ -212,8 +212,8 @@ Transform:
   m_GameObject: {fileID: 632233746}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.36468, y: 0.3773347, z: -0.00043797493}
-  m_LocalScale: {x: 1.1659366, y: 1, z: 1}
+  m_LocalPosition: {x: -0.15097, y: 0.3773347, z: 0.123}
+  m_LocalScale: {x: 0.47489113, y: 1, z: 0.59261}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 63477452}
@@ -448,7 +448,7 @@ GameObject:
   - component: {fileID: 978295067}
   - component: {fileID: 978295066}
   - component: {fileID: 978295065}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -925,7 +925,7 @@ MonoBehaviour:
   groundCheckOrigin: {fileID: 1609855780}
   groundLayer:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 64
   groundedGraceTime: 0.08
   rideHeight: 0.4
   suspensionStrength: 90
@@ -1056,8 +1056,8 @@ Transform:
   m_GameObject: {fileID: 1583063708}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.16138, y: 0.378, z: 0.605559}
-  m_LocalScale: {x: 1.0657, y: 1, z: 1}
+  m_LocalPosition: {x: -0.066003, y: 0.378, z: 0.48212}
+  m_LocalScale: {x: 0.4221598, y: 1, z: 0.59261}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 63477452}
@@ -1087,7 +1087,7 @@ Transform:
   m_GameObject: {fileID: 1609855779}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.144, z: 0}
+  m_LocalPosition: {x: 0, y: 0.111, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1276,8 +1276,8 @@ Transform:
   m_GameObject: {fileID: 1668862068}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.35646, y: 0.3773347, z: -0.00043797493}
-  m_LocalScale: {x: 1.1659366, y: 1, z: 1}
+  m_LocalPosition: {x: 0.14275, y: 0.3773347, z: 0.123}
+  m_LocalScale: {x: 0.47489113, y: 1, z: 0.59261}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 63477452}
@@ -1291,7 +1291,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1715983992}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: grafica
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1431,8 +1431,8 @@ Transform:
   m_GameObject: {fileID: 1871706439}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.16154, y: 0.37799895, z: 0.60556}
-  m_LocalScale: {x: 1.0657, y: 1, z: 1}
+  m_LocalPosition: {x: 0.061921, y: 0.37799895, z: 0.48212}
+  m_LocalScale: {x: 0.4221598, y: 1, z: 0.59261}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 63477452}
@@ -1679,7 +1679,7 @@ GameObject:
   - component: {fileID: 1973567939}
   - component: {fileID: 1973567938}
   - component: {fileID: 1973567937}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Cube (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}

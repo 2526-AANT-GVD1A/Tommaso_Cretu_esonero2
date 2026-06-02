@@ -79,8 +79,8 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Punto di partenza dello SphereCast centrale.")]
         private Transform groundCheckOrigin;
 
-        [SerializeField, Tooltip("Layer considerati come terreno.")]
-        private LayerMask groundLayer = ~0;
+        [SerializeField, Tooltip("Layer considerati come terreno. Imposta SOLO Ground.")]
+        private LayerMask groundLayer;
 
         [SerializeField, Tooltip("Piccolo tempo di tolleranza prima di perdere lo stato grounded.")]
         private float groundedGraceTime = 0.08f;
@@ -250,14 +250,12 @@ namespace ArcadeKart.Core
 
         private void UpdateGrounded()
         {
-            bool hitGround = Physics.SphereCast(
+            bool hitGround = TrySphereCastGround(
                 groundCheckOrigin.position,
                 groundCheckRadius,
                 Vector3.down,
-                out groundHit,
                 groundCheckDistance,
-                groundLayer,
-                QueryTriggerInteraction.Ignore
+                out groundHit
             );
 
             hasGroundContactThisFrame = hitGround;
@@ -266,7 +264,6 @@ namespace ArcadeKart.Core
                 lastGroundedTime = Time.time;
 
             bool grounded = hitGround || (Time.time - lastGroundedTime) <= groundedGraceTime;
-
             IsGrounded = grounded;
 
             if (grounded != wasGrounded)
@@ -289,7 +286,6 @@ namespace ArcadeKart.Core
             float springForce = compression * suspensionStrength;
             float verticalVelocity = Vector3.Dot(rb.linearVelocity, Vector3.up);
             float dampingForce = -verticalVelocity * suspensionDamping;
-
             float totalForce = springForce + dampingForce;
 
             if (totalForce <= 0f)
@@ -416,6 +412,47 @@ namespace ArcadeKart.Core
             );
         }
 
+        private bool TrySphereCastGround(
+            Vector3 origin,
+            float radius,
+            Vector3 direction,
+            float distance,
+            out RaycastHit bestHit)
+        {
+            bestHit = default;
+            RaycastHit[] hits = Physics.SphereCastAll(
+                origin,
+                radius,
+                direction,
+                distance,
+                groundLayer,
+                QueryTriggerInteraction.Ignore
+            );
+
+            float bestDistance = float.MaxValue;
+            bool found = false;
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                RaycastHit hit = hits[i];
+
+                if (hit.collider == null)
+                    continue;
+
+                if (hit.collider.transform.root == transform.root)
+                    continue;
+
+                if (hit.distance < bestDistance)
+                {
+                    bestDistance = hit.distance;
+                    bestHit = hit;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
         private bool TryGetGroundPoint(Transform probe, out Vector3 point)
         {
             point = Vector3.zero;
@@ -423,19 +460,36 @@ namespace ArcadeKart.Core
             if (probe == null)
                 return false;
 
-            if (Physics.Raycast(
+            RaycastHit[] hits = Physics.RaycastAll(
                 probe.position,
                 Vector3.down,
-                out RaycastHit hit,
                 visualGroundAlignDistance,
                 groundLayer,
-                QueryTriggerInteraction.Ignore))
+                QueryTriggerInteraction.Ignore
+            );
+
+            float bestDistance = float.MaxValue;
+            bool found = false;
+
+            for (int i = 0; i < hits.Length; i++)
             {
-                point = hit.point;
-                return true;
+                RaycastHit hit = hits[i];
+
+                if (hit.collider == null)
+                    continue;
+
+                if (hit.collider.transform.root == transform.root)
+                    continue;
+
+                if (hit.distance < bestDistance)
+                {
+                    bestDistance = hit.distance;
+                    point = hit.point;
+                    found = true;
+                }
             }
 
-            return false;
+            return found;
         }
 
         private void DrawProbeGizmo(Transform probe)
