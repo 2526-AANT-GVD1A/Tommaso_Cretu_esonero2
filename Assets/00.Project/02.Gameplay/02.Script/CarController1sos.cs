@@ -70,14 +70,20 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float airControl = 0.3f;
 
-        [SerializeField, Tooltip("Distanza massima del raycast centrale per rilevare il terreno e la sospensione.")]
+        [SerializeField, Tooltip("Distanza massima dello SphereCast centrale per rilevare il terreno e la sospensione.")]
         private float groundCheckDistance = 1.2f;
 
-        [SerializeField, Tooltip("Punto di partenza del raycast centrale.")]
+        [SerializeField, Tooltip("Raggio dello SphereCast per il controllo del terreno.")]
+        private float groundCheckRadius = 0.35f;
+
+        [SerializeField, Tooltip("Punto di partenza dello SphereCast centrale.")]
         private Transform groundCheckOrigin;
 
         [SerializeField, Tooltip("Layer considerati come terreno.")]
         private LayerMask groundLayer = ~0;
+
+        [SerializeField, Tooltip("Piccolo tempo di tolleranza prima di perdere lo stato grounded.")]
+        private float groundedGraceTime = 0.08f;
 
         [SerializeField, Tooltip("Altezza desiderata del kart dal terreno.")]
         private float rideHeight = 0.8f;
@@ -212,7 +218,8 @@ namespace ArcadeKart.Core
                 Vector3 from = groundCheckOrigin.position;
                 Vector3 to = from + Vector3.down * groundCheckDistance;
                 Gizmos.DrawLine(from, to);
-                Gizmos.DrawWireSphere(to, 0.05f);
+                Gizmos.DrawWireSphere(from, groundCheckRadius);
+                Gizmos.DrawWireSphere(to, groundCheckRadius);
 
                 Gizmos.color = Color.cyan;
                 Vector3 ridePoint = from + Vector3.down * rideHeight;
@@ -238,17 +245,24 @@ namespace ArcadeKart.Core
         private Quaternion driftVisualBaseRotation = Quaternion.identity;
         private float currentDriftYaw;
         private RaycastHit groundHit;
+        private float lastGroundedTime;
 
         private void UpdateGrounded()
         {
-            bool grounded = Physics.Raycast(
+            bool hitGround = Physics.SphereCast(
                 groundCheckOrigin.position,
+                groundCheckRadius,
                 Vector3.down,
                 out groundHit,
                 groundCheckDistance,
                 groundLayer,
                 QueryTriggerInteraction.Ignore
             );
+
+            if (hitGround)
+                lastGroundedTime = Time.time;
+
+            bool grounded = hitGround || (Time.time - lastGroundedTime) <= groundedGraceTime;
 
             IsGrounded = grounded;
 
