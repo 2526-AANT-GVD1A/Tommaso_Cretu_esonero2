@@ -43,23 +43,23 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float driftFactorHeld = 0.55f;
 
-        [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift (sotto questa, niente sgommata).")]
+        [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift.")]
         private float driftMinSpeed = 4f;
 
-        [SerializeField, Tooltip("Sterzata minima (0-1) per attivare il drift: evita sgommate quando vai dritto.")]
+        [SerializeField, Tooltip("Sterzata minima (0-1) per attivare il drift.")]
         [Range(0f, 1f)]
         private float driftMinSteer = 0.2f;
 
-        [SerializeField, Tooltip("Moltiplicatore di sterzata mentre tieni Drift: 1 = nessun bonus, 1.4 = il drift gira di piu'.")]
+        [SerializeField, Tooltip("Moltiplicatore di sterzata mentre tieni Drift.")]
         private float driftSteerBoost = 1.4f;
 
-        [SerializeField, Tooltip("Transform del mesh visivo del kart (figlio). Verra' ruotato in LateUpdate per il colpo d'occhio del drift. Lascia vuoto per disattivare.")]
+        [SerializeField, Tooltip("Transform del mesh visivo del kart.")]
         private Transform driftVisual;
 
-        [SerializeField, Tooltip("Gradi massimi di rotazione visiva del mesh durante il drift (solo cosmesi, non tocca la fisica).")]
+        [SerializeField, Tooltip("Gradi massimi di rotazione visiva del mesh durante il drift.")]
         private float driftVisualYawDegrees = 25f;
 
-        [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo (alto = scatto, basso = pigro).")]
+        [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo.")]
         private float driftVisualLerpSpeed = 8f;
 
         [Header("Ground & Gravity")]
@@ -70,23 +70,42 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float airControl = 0.3f;
 
-        [SerializeField, Tooltip("Distanza massima del raycast verso il basso per rilevare il terreno e la sospensione.")]
+        [SerializeField, Tooltip("Distanza massima del raycast centrale per rilevare il terreno e la sospensione.")]
         private float groundCheckDistance = 1.2f;
 
-        [SerializeField, Tooltip("Punto di partenza del raycast (figlio vuoto del kart).")]
+        [SerializeField, Tooltip("Punto di partenza del raycast centrale.")]
         private Transform groundCheckOrigin;
 
-        [SerializeField, Tooltip("Layer considerati come 'terreno'.")]
+        [SerializeField, Tooltip("Layer considerati come terreno.")]
         private LayerMask groundLayer = ~0;
 
         [SerializeField, Tooltip("Altezza desiderata del kart dal terreno.")]
         private float rideHeight = 0.8f;
 
-        [SerializeField, Tooltip("Forza della sospensione raycast. Piu' alto = piu' rigida.")]
+        [SerializeField, Tooltip("Forza della sospensione raycast.")]
         private float suspensionStrength = 90f;
 
-        [SerializeField, Tooltip("Smorzamento della sospensione. Piu' alto = meno rimbalzo.")]
+        [SerializeField, Tooltip("Smorzamento della sospensione.")]
         private float suspensionDamping = 12f;
+
+        [Header("Ground Alignment Visual")]
+        [SerializeField, Tooltip("Probe anteriore sinistra per allineamento visivo al terreno.")]
+        private Transform frontLeftGroundProbe;
+
+        [SerializeField, Tooltip("Probe anteriore destra per allineamento visivo al terreno.")]
+        private Transform frontRightGroundProbe;
+
+        [SerializeField, Tooltip("Probe posteriore sinistra per allineamento visivo al terreno.")]
+        private Transform rearLeftGroundProbe;
+
+        [SerializeField, Tooltip("Probe posteriore destra per allineamento visivo al terreno.")]
+        private Transform rearRightGroundProbe;
+
+        [SerializeField, Tooltip("Distanza dei raycast usati per inclinare visivamente il kart.")]
+        private float visualGroundAlignDistance = 1.4f;
+
+        [SerializeField, Tooltip("Velocita' di allineamento del mesh alla pendenza del terreno.")]
+        private float groundAlignLerpSpeed = 10f;
 
         [Header("Impact")]
         [SerializeField, Tooltip("Velocita' minima di urto per invocare OnImpact.")]
@@ -96,9 +115,9 @@ namespace ArcadeKart.Core
 
         #region Events
 
+        public UnityEvent<bool> OnGroundedChanged;
         public UnityEvent<float> OnSpeedChanged;
         public UnityEvent<float> OnImpact;
-        public UnityEvent<bool> OnGroundedChanged;
 
         #endregion
 
@@ -156,10 +175,7 @@ namespace ArcadeKart.Core
 
             if (groundCheckOrigin == null)
             {
-                Debug.LogWarning(
-                    "[KartController] Ground Check Origin non assegnato: uso il transform principale. Crea un figlio vuoto sotto il kart.",
-                    this
-                );
+                Debug.LogWarning("[KartController] Ground Check Origin non assegnato: uso il transform principale.", this);
                 groundCheckOrigin = transform;
             }
 
@@ -178,6 +194,7 @@ namespace ArcadeKart.Core
         private void LateUpdate()
         {
             UpdateDriftVisual();
+            UpdateGroundAlignmentVisual();
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -189,18 +206,23 @@ namespace ArcadeKart.Core
 
         private void OnDrawGizmos()
         {
-            if (groundCheckOrigin == null)
-                return;
+            if (groundCheckOrigin != null)
+            {
+                Gizmos.color = (Application.isPlaying && IsGrounded) ? Color.green : Color.red;
+                Vector3 from = groundCheckOrigin.position;
+                Vector3 to = from + Vector3.down * groundCheckDistance;
+                Gizmos.DrawLine(from, to);
+                Gizmos.DrawWireSphere(to, 0.05f);
 
-            Gizmos.color = (Application.isPlaying && IsGrounded) ? Color.green : Color.red;
-            Vector3 from = groundCheckOrigin.position;
-            Vector3 to = from + Vector3.down * groundCheckDistance;
-            Gizmos.DrawLine(from, to);
-            Gizmos.DrawWireSphere(to, 0.05f);
+                Gizmos.color = Color.cyan;
+                Vector3 ridePoint = from + Vector3.down * rideHeight;
+                Gizmos.DrawWireSphere(ridePoint, 0.08f);
+            }
 
-            Gizmos.color = Color.cyan;
-            Vector3 ridePoint = from + Vector3.down * rideHeight;
-            Gizmos.DrawWireSphere(ridePoint, 0.08f);
+            DrawProbeGizmo(frontLeftGroundProbe);
+            DrawProbeGizmo(frontRightGroundProbe);
+            DrawProbeGizmo(rearLeftGroundProbe);
+            DrawProbeGizmo(rearRightGroundProbe);
         }
 
         #endregion
@@ -249,7 +271,6 @@ namespace ArcadeKart.Core
             float dampingForce = -verticalVelocity * suspensionDamping;
 
             float totalForce = springForce + dampingForce;
-
             rb.AddForce(Vector3.up * totalForce, ForceMode.Acceleration);
         }
 
@@ -317,9 +338,90 @@ namespace ArcadeKart.Core
                 targetYaw,
                 1f - Mathf.Exp(-driftVisualLerpSpeed * Time.deltaTime)
             );
+        }
 
-            driftVisual.localRotation =
-                driftVisualBaseRotation * Quaternion.Euler(0f, currentDriftYaw, 0f);
+        private void UpdateGroundAlignmentVisual()
+        {
+            if (driftVisual == null)
+                return;
+
+            if (!TryGetGroundPoint(frontLeftGroundProbe, out Vector3 fl) ||
+                !TryGetGroundPoint(frontRightGroundProbe, out Vector3 fr) ||
+                !TryGetGroundPoint(rearLeftGroundProbe, out Vector3 rl) ||
+                !TryGetGroundPoint(rearRightGroundProbe, out Vector3 rr))
+            {
+                Quaternion targetFlat =
+                    transform.rotation *
+                    driftVisualBaseRotation *
+                    Quaternion.Euler(0f, currentDriftYaw, 0f);
+
+                driftVisual.rotation = Quaternion.Slerp(
+                    driftVisual.rotation,
+                    targetFlat,
+                    1f - Mathf.Exp(-groundAlignLerpSpeed * Time.deltaTime)
+                );
+                return;
+            }
+
+            Vector3 frontMid = (fl + fr) * 0.5f;
+            Vector3 rearMid = (rl + rr) * 0.5f;
+            Vector3 leftMid = (fl + rl) * 0.5f;
+            Vector3 rightMid = (fr + rr) * 0.5f;
+
+            Vector3 groundForward = (frontMid - rearMid).normalized;
+            Vector3 groundRight = (rightMid - leftMid).normalized;
+
+            if (groundForward.sqrMagnitude < 0.001f || groundRight.sqrMagnitude < 0.001f)
+                return;
+
+            Vector3 groundUp = Vector3.Cross(groundForward, groundRight).normalized;
+
+            if (groundUp.y < 0f)
+                groundUp = -groundUp;
+
+            Quaternion slopeRotation = Quaternion.LookRotation(groundForward, groundUp);
+            Quaternion targetWorldRotation =
+                slopeRotation *
+                driftVisualBaseRotation *
+                Quaternion.Euler(0f, currentDriftYaw, 0f);
+
+            driftVisual.rotation = Quaternion.Slerp(
+                driftVisual.rotation,
+                targetWorldRotation,
+                1f - Mathf.Exp(-groundAlignLerpSpeed * Time.deltaTime)
+            );
+        }
+
+        private bool TryGetGroundPoint(Transform probe, out Vector3 point)
+        {
+            point = Vector3.zero;
+
+            if (probe == null)
+                return false;
+
+            if (Physics.Raycast(
+                probe.position,
+                Vector3.down,
+                out RaycastHit hit,
+                visualGroundAlignDistance,
+                groundLayer,
+                QueryTriggerInteraction.Ignore))
+            {
+                point = hit.point;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void DrawProbeGizmo(Transform probe)
+        {
+            if (probe == null)
+                return;
+
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(probe.position, probe.position + Vector3.down * visualGroundAlignDistance);
+            Gizmos.DrawWireSphere(probe.position + Vector3.down * visualGroundAlignDistance, 0.04f);
         }
 
         private void StartMultiplier(float value, float duration)
