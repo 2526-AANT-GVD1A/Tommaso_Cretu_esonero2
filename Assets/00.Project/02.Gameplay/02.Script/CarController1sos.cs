@@ -34,14 +34,15 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float turnAtRest = 0.2f;
 
-        [SerializeField, Tooltip("Fattore di drift: 1 = no drift, 0 = scivola completamente.")]
-        [Range(0f, 1f)]
-        private float driftFactor = 0.92f;
+        [Header("Grip / Drift")]
+        [SerializeField, Tooltip("Grip laterale normale a terra. Alto = il kart si riallinea meglio.")]
+        private float groundLateralFriction = 14f;
 
-        [Header("Drift (Sgommata)")]
-        [SerializeField, Tooltip("Fattore di drift quando tieni premuto il tasto Drift. Piu' basso = scivola di piu'.")]
-        [Range(0f, 1f)]
-        private float driftFactorHeld = 0.55f;
+        [SerializeField, Tooltip("Grip laterale mentre sei in aria. Basso = mantiene piu' inerzia laterale.")]
+        private float airLateralFriction = 2f;
+
+        [SerializeField, Tooltip("Grip laterale mentre tieni premuto Drift.")]
+        private float driftLateralFriction = 4f;
 
         [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift.")]
         private float driftMinSpeed = 4f;
@@ -93,6 +94,17 @@ namespace ArcadeKart.Core
 
         [SerializeField, Tooltip("Smorzamento della sospensione.")]
         private float suspensionDamping = 12f;
+
+        [Header("Air Stability")]
+        [SerializeField, Tooltip("Smorza la rotazione residua in aria per evitare spin strani al rientro.")]
+        private float airAngularDamping = 2.5f;
+
+        [SerializeField, Tooltip("Limite massimo della velocita' angolare Y in aria.")]
+        private float maxAirYawAngularVelocity = 2.5f;
+
+        [SerializeField, Tooltip("Quanto smorzare la rotazione al momento dell'atterraggio.")]
+        [Range(0f, 1f)]
+        private float landingAngularDampingFactor = 0.2f;
 
         [Header("Ground Alignment Visual")]
         [SerializeField, Tooltip("Probe anteriore sinistra per allineamento visivo al terreno.")]
@@ -191,8 +203,12 @@ namespace ArcadeKart.Core
 
         private void FixedUpdate()
         {
+            bool wasGroundedLastFrame = IsGrounded;
+
             UpdateGrounded();
+            HandleLandingStabilization(wasGroundedLastFrame);
             ApplySuspension();
+            ApplyAirStabilization();
             UpdateSteering();
             UpdateVelocity();
         }
@@ -273,13 +289,35 @@ namespace ArcadeKart.Core
             }
         }
 
+        private void HandleLandingStabilization(bool wasGroundedLastFrame)
+        {
+            if (!wasGroundedLastFrame && IsGrounded)
+            {
+                Vector3 av = rb.angularVelocity;
+                av.y *= landingAngularDampingFactor;
+                rb.angularVelocity = av;
+            }
+        }
+
+        private void ApplyAirStabilization()
+        {
+            if (IsGrounded)
+                return;
+
+            Vector3 av = rb.angularVelocity;
+            av.x = 0f;
+            av.z = 0f;
+            av.y = Mathf.Clamp(av.y, -maxAirYawAngularVelocity, maxAirYawAngularVelocity);
+            av.y = Mathf.MoveTowards(av.y, 0f, airAngularDamping * Time.fixedDeltaTime);
+            rb.angularVelocity = av;
+        }
+
         private void ApplySuspension()
         {
             if (!hasGroundContactThisFrame)
                 return;
 
             float compression = Mathf.Clamp(rideHeight - groundHit.distance, 0f, rideHeight);
-
             if (compression <= 0f)
                 return;
 
@@ -311,27 +349,44 @@ namespace ArcadeKart.Core
 
         private void UpdateVelocity()
         {
+            Vector3 localVelocity = transform.InverseTransformDirection(rb.linearVelocity);
+
+            float lateralSpeed = localVelocity.x;
+            float forwardSpeed = localVelocity.z;
+            float verticalSpeed = rb.linearVelocity.y;
+
             float throttle = input.Move.y;
-            float maxFwd = maxSpeed * speedMultiplier;
-            float targetSpeed = throttle >= 0f ? throttle * maxFwd : throttle * reverseSpeed;
-            float rate = (Mathf.Abs(targetSpeed) > Mathf.Abs(CurrentSpeed)) ? acceleration : deceleration;
+            float maxForward = maxSpeed * speedMultiplier;
+            float targetForwardSpeed = throttle >= 0f ? throttle * maxForward : throttle * reverseSpeed;
+
+            float forwardRate = (Mathf.Abs(targetForwardSpeed) > Mathf.Abs(forwardSpeed)) ? acceleration : deceleration;
 
             if (input.Brake)
             {
-                targetSpeed = 0f;
-                rate = brakeStrength;
+                targetForwardSpeed = 0f;
+                forwardRate = brakeStrength;
             }
 
-            CurrentSpeed = Mathf.MoveTowards(CurrentSpeed, targetSpeed, rate * Time.fixedDeltaTime);
+            forwardSpeed = Mathf.MoveTowards(forwardSpeed, targetForwardSpeed, forwardRate * Time.fixedDeltaTime);
 
-            float verticalVel = rb.linearVelocity.y;
-            verticalVel -= gravity * Time.fixedDeltaTime;
+            float lateralFriction = groundLateralFriction;
+            if (!IsGrounded)
+                lateralFriction = airLateralFriction;
+            else if (IsDrifting)
+                lateralFriction = driftLateralFriction;
 
-            float activeDriftFactor = (input.Drift && IsGrounded) ? driftFactorHeld : driftFactor;
-            Vector3 forwardVel = transform.forward * CurrentSpeed;
-            Vector3 keptLateral = Vector3.Project(rb.linearVelocity, transform.right) * (1f - activeDriftFactor);
+            lateralSpeed = Mathf.MoveTowards(lateralSpeed, 0f, lateralFriction * Time.fixedDeltaTime);
 
-            rb.linearVelocity = forwardVel + keptLateral + Vector3.up * verticalVel;
+            verticalSpeed -= gravity * Time.fixedDeltaTime;
+
+            Vector3 finalVelocity =
+                transform.right * lateralSpeed +
+                transform.forward * forwardSpeed +
+                Vector3.up * verticalSpeed;
+
+            rb.linearVelocity = finalVelocity;
+
+            CurrentSpeed = forwardSpeed;
 
             if (Mathf.Abs(CurrentSpeed - lastReportedSpeed) > 0.05f)
             {
@@ -420,6 +475,7 @@ namespace ArcadeKart.Core
             out RaycastHit bestHit)
         {
             bestHit = default;
+
             RaycastHit[] hits = Physics.SphereCastAll(
                 origin,
                 radius,
