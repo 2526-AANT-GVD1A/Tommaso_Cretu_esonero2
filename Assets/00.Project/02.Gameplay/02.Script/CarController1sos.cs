@@ -35,10 +35,16 @@ namespace ArcadeKart.Core
         private float turnAtRest = 0.2f;
 
         [Header("Grip / Drift")]
-        [SerializeField, Tooltip("Grip laterale normale a terra. Alto = il kart si riallinea meglio.")]
+        [
+            SerializeField,
+            Tooltip("Grip laterale normale a terra. Alto = il kart si riallinea meglio.")
+        ]
         private float groundLateralFriction = 14f;
 
-        [SerializeField, Tooltip("Grip laterale mentre sei in aria. Basso = mantiene piu' inerzia laterale.")]
+        [
+            SerializeField,
+            Tooltip("Grip laterale mentre sei in aria. Basso = mantiene piu' inerzia laterale.")
+        ]
         private float airLateralFriction = 2f;
 
         [SerializeField, Tooltip("Grip laterale mentre tieni premuto Drift.")]
@@ -71,7 +77,12 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float airControl = 0.3f;
 
-        [SerializeField, Tooltip("Distanza massima dello SphereCast centrale per rilevare il terreno e la sospensione.")]
+        [
+            SerializeField,
+            Tooltip(
+                "Distanza massima dello SphereCast centrale per rilevare il terreno e la sospensione."
+            )
+        ]
         private float groundCheckDistance = 1.2f;
 
         [SerializeField, Tooltip("Raggio dello SphereCast per il controllo del terreno.")]
@@ -82,6 +93,15 @@ namespace ArcadeKart.Core
 
         [SerializeField, Tooltip("Layer considerati come terreno. Imposta SOLO Ground.")]
         private LayerMask groundLayer;
+
+        [
+            SerializeField,
+            Tooltip(
+                "Angolo massimo (gradi) della superficie considerata terreno. Oltre questo valore e' un muro: il kart non ci sale e scivola giu'."
+            )
+        ]
+        [Range(0f, 89f)]
+        private float maxGroundSlopeAngle = 45f;
 
         [SerializeField, Tooltip("Piccolo tempo di tolleranza prima di perdere lo stato grounded.")]
         private float groundedGraceTime = 0.08f;
@@ -95,8 +115,20 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Smorzamento della sospensione.")]
         private float suspensionDamping = 12f;
 
+        [Header("Wall Avoidance")]
+        [
+            SerializeField,
+            Tooltip(
+                "Tempo di tolleranza in cui il contatto col muro resta attivo anche se la collisione sfarfalla. Evita la salita a scatti (cricchetto)."
+            )
+        ]
+        private float wallContactGraceTime = 0.2f;
+
         [Header("Air Stability")]
-        [SerializeField, Tooltip("Smorza la rotazione residua in aria per evitare spin strani al rientro.")]
+        [
+            SerializeField,
+            Tooltip("Smorza la rotazione residua in aria per evitare spin strani al rientro.")
+        ]
         private float airAngularDamping = 2.5f;
 
         [SerializeField, Tooltip("Limite massimo della velocita' angolare Y in aria.")]
@@ -146,11 +178,11 @@ namespace ArcadeKart.Core
         public bool IsGrounded { get; private set; }
 
         public bool IsDrifting =>
-            input != null &&
-            input.Drift &&
-            IsGrounded &&
-            Mathf.Abs(CurrentSpeed) >= driftMinSpeed &&
-            Mathf.Abs(input.Move.x) >= driftMinSteer;
+            input != null
+            && input.Drift
+            && IsGrounded
+            && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
+            && Mathf.Abs(input.Move.x) >= driftMinSteer;
 
         public void ApplyBoost(float magnitude, float duration) =>
             StartMultiplier(Mathf.Max(1f, magnitude), duration);
@@ -187,13 +219,17 @@ namespace ArcadeKart.Core
             rb.useGravity = false;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
-            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            rb.constraints =
+                RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
             input = GetComponent<KartInput>();
 
             if (groundCheckOrigin == null)
             {
-                Debug.LogWarning("[KartController] Ground Check Origin non assegnato: uso il transform principale.", this);
+                Debug.LogWarning(
+                    "[KartController] Ground Check Origin non assegnato: uso il transform principale.",
+                    this
+                );
                 groundCheckOrigin = transform;
             }
 
@@ -226,6 +262,28 @@ namespace ArcadeKart.Core
                 OnImpact?.Invoke(v);
         }
 
+        private void OnCollisionStay(Collision collision)
+        {
+            // Niente filtro per layer: l'anti-arrampicata dipende dalla geometria
+            // (quanto e' ripida la superficie), non dal fatto che sia "ground". Le
+            // superfici calpestabili hanno angolo <= soglia e non scattano comunque.
+            // Cerca il contatto piu' ripido: se supera il limite e' un muro e
+            // memorizziamo la sua normale per deviare la velocita' in UpdateVelocity.
+            float steepestAngle = maxGroundSlopeAngle;
+            for (int i = 0; i < collision.contactCount; i++)
+            {
+                Vector3 n = collision.GetContact(i).normal;
+                float angle = Vector3.Angle(n, Vector3.up);
+                if (angle > steepestAngle)
+                {
+                    steepestAngle = angle;
+                    steepWallNormal = n;
+                    steepWallPoint = collision.GetContact(i).point;
+                    lastWallContactTime = Time.time;
+                }
+            }
+        }
+
         private void OnDrawGizmos()
         {
             if (groundCheckOrigin != null)
@@ -246,6 +304,20 @@ namespace ArcadeKart.Core
             DrawProbeGizmo(frontRightGroundProbe);
             DrawProbeGizmo(rearLeftGroundProbe);
             DrawProbeGizmo(rearRightGroundProbe);
+
+            if (hasDebugGroundHit)
+            {
+                Gizmos.color = debugGroundHitWalkable ? Color.green : Color.red;
+                Gizmos.DrawLine(debugGroundHitPoint, debugGroundHitPoint + debugGroundHitNormal);
+                Gizmos.DrawWireSphere(debugGroundHitPoint, 0.06f);
+            }
+
+            if (Application.isPlaying && WallContactActive)
+            {
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawLine(steepWallPoint, steepWallPoint + steepWallNormal);
+                Gizmos.DrawWireSphere(steepWallPoint, 0.06f);
+            }
         }
 
         #endregion
@@ -263,6 +335,17 @@ namespace ArcadeKart.Core
         private RaycastHit groundHit;
         private float lastGroundedTime;
         private bool hasGroundContactThisFrame;
+        private bool hasDebugGroundHit;
+        private Vector3 debugGroundHitPoint;
+        private Vector3 debugGroundHitNormal;
+        private bool debugGroundHitWalkable;
+        private float lastWallContactTime = -999f;
+        private Vector3 steepWallNormal;
+        private Vector3 steepWallPoint;
+
+        // Il contatto col muro resta "attivo" per un breve grace time dopo
+        // l'ultimo OnCollisionStay, cosi' il guard non sfarfalla tra i frame.
+        private bool WallContactActive => (Time.time - lastWallContactTime) <= wallContactGraceTime;
 
         private void UpdateGrounded()
         {
@@ -302,7 +385,13 @@ namespace ArcadeKart.Core
         private void ApplyAirStabilization()
         {
             if (IsGrounded)
+            {
+                // Lo sterzo e' gestito via transform.Rotate: a terra qualsiasi
+                // velocita' angolare e' residuo di una collisione e va azzerata,
+                // altrimenti il kart continua a ruotare da solo ("resta in curva").
+                rb.angularVelocity = Vector3.zero;
                 return;
+            }
 
             Vector3 av = rb.angularVelocity;
             av.x = 0f;
@@ -357,9 +446,13 @@ namespace ArcadeKart.Core
 
             float throttle = input.Move.y;
             float maxForward = maxSpeed * speedMultiplier;
-            float targetForwardSpeed = throttle >= 0f ? throttle * maxForward : throttle * reverseSpeed;
+            float targetForwardSpeed =
+                throttle >= 0f ? throttle * maxForward : throttle * reverseSpeed;
 
-            float forwardRate = (Mathf.Abs(targetForwardSpeed) > Mathf.Abs(forwardSpeed)) ? acceleration : deceleration;
+            float forwardRate =
+                (Mathf.Abs(targetForwardSpeed) > Mathf.Abs(forwardSpeed))
+                    ? acceleration
+                    : deceleration;
 
             if (input.Brake)
             {
@@ -367,7 +460,11 @@ namespace ArcadeKart.Core
                 forwardRate = brakeStrength;
             }
 
-            forwardSpeed = Mathf.MoveTowards(forwardSpeed, targetForwardSpeed, forwardRate * Time.fixedDeltaTime);
+            forwardSpeed = Mathf.MoveTowards(
+                forwardSpeed,
+                targetForwardSpeed,
+                forwardRate * Time.fixedDeltaTime
+            );
 
             float lateralFriction = groundLateralFriction;
             if (!IsGrounded)
@@ -375,14 +472,32 @@ namespace ArcadeKart.Core
             else if (IsDrifting)
                 lateralFriction = driftLateralFriction;
 
-            lateralSpeed = Mathf.MoveTowards(lateralSpeed, 0f, lateralFriction * Time.fixedDeltaTime);
+            lateralSpeed = Mathf.MoveTowards(
+                lateralSpeed,
+                0f,
+                lateralFriction * Time.fixedDeltaTime
+            );
 
             verticalSpeed -= gravity * Time.fixedDeltaTime;
 
             Vector3 finalVelocity =
-                transform.right * lateralSpeed +
-                transform.forward * forwardSpeed +
-                Vector3.up * verticalSpeed;
+                transform.right * lateralSpeed
+                + transform.forward * forwardSpeed
+                + Vector3.up * verticalSpeed;
+
+            if (WallContactActive)
+            {
+                // Rimuove la componente che spinge DENTRO il muro (slide lungo la
+                // parete) cosi' il solver di collisione non ha piu' compenetrazione
+                // da risolvere spingendo il kart verso l'alto.
+                float intoWall = Vector3.Dot(finalVelocity, steepWallNormal);
+                if (intoWall < 0f)
+                    finalVelocity -= steepWallNormal * intoWall;
+
+                // Il muro non puo' lanciare il kart verso l'alto.
+                if (finalVelocity.y > 0f)
+                    finalVelocity.y = 0f;
+            }
 
             rb.linearVelocity = finalVelocity;
 
@@ -420,15 +535,17 @@ namespace ArcadeKart.Core
             if (driftVisual == null)
                 return;
 
-            if (!TryGetGroundPoint(frontLeftGroundProbe, out Vector3 fl) ||
-                !TryGetGroundPoint(frontRightGroundProbe, out Vector3 fr) ||
-                !TryGetGroundPoint(rearLeftGroundProbe, out Vector3 rl) ||
-                !TryGetGroundPoint(rearRightGroundProbe, out Vector3 rr))
+            if (
+                !TryGetGroundPoint(frontLeftGroundProbe, out Vector3 fl)
+                || !TryGetGroundPoint(frontRightGroundProbe, out Vector3 fr)
+                || !TryGetGroundPoint(rearLeftGroundProbe, out Vector3 rl)
+                || !TryGetGroundPoint(rearRightGroundProbe, out Vector3 rr)
+            )
             {
                 Quaternion targetFlat =
-                    transform.rotation *
-                    driftVisualBaseRotation *
-                    Quaternion.Euler(0f, currentDriftYaw, 0f);
+                    transform.rotation
+                    * driftVisualBaseRotation
+                    * Quaternion.Euler(0f, currentDriftYaw, 0f);
 
                 driftVisual.rotation = Quaternion.Slerp(
                     driftVisual.rotation,
@@ -456,9 +573,7 @@ namespace ArcadeKart.Core
 
             Quaternion slopeRotation = Quaternion.LookRotation(groundForward, groundUp);
             Quaternion targetWorldRotation =
-                slopeRotation *
-                driftVisualBaseRotation *
-                Quaternion.Euler(0f, currentDriftYaw, 0f);
+                slopeRotation * driftVisualBaseRotation * Quaternion.Euler(0f, currentDriftYaw, 0f);
 
             driftVisual.rotation = Quaternion.Slerp(
                 driftVisual.rotation,
@@ -472,7 +587,8 @@ namespace ArcadeKart.Core
             float radius,
             Vector3 direction,
             float distance,
-            out RaycastHit bestHit)
+            out RaycastHit bestHit
+        )
         {
             bestHit = default;
 
@@ -485,8 +601,10 @@ namespace ArcadeKart.Core
                 QueryTriggerInteraction.Ignore
             );
 
-            float bestDistance = float.MaxValue;
+            float bestWalkableDistance = float.MaxValue;
+            float bestAnyDistance = float.MaxValue;
             bool found = false;
+            hasDebugGroundHit = false;
 
             for (int i = 0; i < hits.Length; i++)
             {
@@ -498,9 +616,25 @@ namespace ArcadeKart.Core
                 if (hit.collider.transform.root == transform.root)
                     continue;
 
-                if (hit.distance < bestDistance)
+                float slopeAngle = Vector3.Angle(hit.normal, Vector3.up);
+                bool walkable = slopeAngle <= maxGroundSlopeAngle;
+
+                // debug: colpo piu' vicino in assoluto (qualsiasi pendenza), per il gizmo
+                if (hit.distance < bestAnyDistance)
                 {
-                    bestDistance = hit.distance;
+                    bestAnyDistance = hit.distance;
+                    debugGroundHitPoint = hit.point;
+                    debugGroundHitNormal = hit.normal;
+                    debugGroundHitWalkable = walkable;
+                    hasDebugGroundHit = true;
+                }
+
+                if (!walkable)
+                    continue; // muro troppo ripido: non e' terreno
+
+                if (hit.distance < bestWalkableDistance)
+                {
+                    bestWalkableDistance = hit.distance;
                     bestHit = hit;
                     found = true;
                 }
@@ -554,7 +688,10 @@ namespace ArcadeKart.Core
                 return;
 
             Gizmos.color = Color.yellow;
-            Gizmos.DrawLine(probe.position, probe.position + Vector3.down * visualGroundAlignDistance);
+            Gizmos.DrawLine(
+                probe.position,
+                probe.position + Vector3.down * visualGroundAlignDistance
+            );
             Gizmos.DrawWireSphere(probe.position + Vector3.down * visualGroundAlignDistance, 0.04f);
         }
 

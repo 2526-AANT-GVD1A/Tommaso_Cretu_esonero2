@@ -687,7 +687,7 @@ GameObject:
   m_Component:
   - component: {fileID: 267760749}
   - component: {fileID: 267760750}
-  m_Layer: 8
+  m_Layer: 0
   m_Name: CollisioniMURI
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1848,10 +1848,12 @@ MonoBehaviour:
   groundLayer:
     serializedVersion: 2
     m_Bits: 64
+  maxGroundSlopeAngle: 45
   groundedGraceTime: 0.08
   rideHeight: 0.4
   suspensionStrength: 90
   suspensionDamping: 0.1
+  wallContactGraceTime: 0.2
   airAngularDamping: 2.5
   maxAirYawAngularVelocity: 0
   landingAngularDampingFactor: 0.2
