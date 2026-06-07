@@ -1088,6 +1088,38 @@ Transform:
   m_Children: []
   m_Father: {fileID: 63477452}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &671000158
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 671000159}
+  m_Layer: 0
+  m_Name: triggerCamera
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &671000159
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 671000158}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 50.888485, y: 15.164575, z: -52.37106}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1874502660}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &679686891
 GameObject:
   m_ObjectHideFlags: 0
@@ -2240,7 +2272,7 @@ GameObject:
   - component: {fileID: 1433482422}
   m_Layer: 0
   m_Name: Kart1.0
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -2264,6 +2296,10 @@ MonoBehaviour:
   brakeStrength: 18
   turnRate: 700
   turnAtRest: 0.2
+  shoppingCartSteerLoss: 0.65
+  shoppingCartSlip: 0.75
+  shoppingCartSlipSteerThreshold: 0.15
+  cameraRelativeTurnResponsiveness: 10
   groundLateralFriction: 100
   airLateralFriction: 100
   driftLateralFriction: 4
@@ -2641,19 +2677,47 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1614856956}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 663b5bd120ec84a3cb675722d95bfb5b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   target: {fileID: 1433482426}
-  offset: {x: 0, y: 5, z: -4}
-  followDamping: 5
-  lookDamping: 8
-  lookAtOffset: {x: 0, y: 1, z: 0}
-  useFixedY: 0
-  fixedY: 5
-  followTargetRotation: 1
+  phases:
+  - phaseId: Default
+    offset: {x: 0, y: 4, z: -7}
+    followTargetRotation: 0
+    followX: 1
+    followY: 1
+    followZ: 1
+    fixedX: 0
+    fixedY: 5
+    fixedZ: 0
+    lookAtOffset: {x: 0, y: 1, z: 0}
+    useLookAtTarget: 0
+    fixedEulerAngles: {x: 20, y: 0, z: 0}
+    fieldOfView: 60
+    followDamping: 5
+    lookDamping: 8
+    fovDamping: 6
+  - phaseId: Tunel
+    offset: {x: 0, y: 1, z: -3}
+    followTargetRotation: 0
+    followX: 1
+    followY: 1
+    followZ: 1
+    fixedX: 0
+    fixedY: 5
+    fixedZ: 0
+    lookAtOffset: {x: 0, y: 1, z: 0}
+    useLookAtTarget: 0
+    fixedEulerAngles: {x: 0, y: 0, z: 0}
+    fieldOfView: 90
+    followDamping: 5
+    lookDamping: 8
+    fovDamping: 6
+  startingPhaseId: Default
+  fallbackToFirstPhase: 1
 --- !u!114 &1614856961
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2661,7 +2725,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1614856956}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
   m_Name: 
@@ -3156,7 +3220,7 @@ GameObject:
   - component: {fileID: 1845557286}
   m_Layer: 0
   m_Name: sfera
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -3228,6 +3292,76 @@ Transform:
   m_Children: []
   m_Father: {fileID: 63477452}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1874502659
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1874502660}
+  - component: {fileID: 1874502662}
+  - component: {fileID: 1874502661}
+  m_Layer: 0
+  m_Name: triggerzona aperta
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1874502660
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1874502659}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 6.54, y: -14.79, z: 35.1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 671000159}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1874502661
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1874502659}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5be23c4743057bed69abd36f6c912cb8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  phaseId: Tunel
+  requiredTag: Player
+  oneShot: 0
+  targetCamera: {fileID: 1614856960}
+--- !u!65 &1874502662
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1874502659}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1910366172
 GameObject:
   m_ObjectHideFlags: 0
@@ -3900,3 +4034,4 @@ SceneRoots:
   - {fileID: 1928957568}
   - {fileID: 1801709293}
   - {fileID: 1433482426}
+  - {fileID: 671000159}
