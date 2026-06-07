@@ -34,6 +34,21 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float turnAtRest = 0.2f;
 
+        [SerializeField, Tooltip("Quanto la sterzata perde efficacia alle alte velocita'. 0 = sterzo sempre uguale, 1 = molto effetto carrello.")]
+        [Range(0f, 1f)]
+        private float shoppingCartSteerLoss = 0.65f;
+
+        [SerializeField, Tooltip("Quanto il kart perde grip laterale in curva alle alte velocita'.")]
+        [Range(0f, 1f)]
+        private float shoppingCartSlip = 0.75f;
+
+        [SerializeField, Tooltip("Quanto input di sterzo serve per iniziare a far slittare sensibilmente il kart.")]
+        [Range(0f, 1f)]
+        private float shoppingCartSlipSteerThreshold = 0.15f;
+
+        [SerializeField, Tooltip("Velocita' con cui il kart ruota verso la direzione desiderata letta dalla camera.")]
+        private float cameraRelativeTurnResponsiveness = 10f;
+
         [Header("Grip / Drift")]
         [SerializeField, Tooltip("Grip laterale normale a terra. Alto = il kart si riallinea meglio.")]
         private float groundLateralFriction = 14f;
@@ -47,7 +62,7 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift.")]
         private float driftMinSpeed = 4f;
 
-        [SerializeField, Tooltip("Sterzata minima (0-1) per attivare il drift.")]
+        [SerializeField, Tooltip("Input minimo di direzione per considerare attivo il drift.")]
         [Range(0f, 1f)]
         private float driftMinSteer = 0.2f;
 
@@ -67,7 +82,7 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Gravita' custom applicata al kart.")]
         private float gravity = 30f;
 
-        [SerializeField, Tooltip("Quanto risponde lo sterzo in aria (0-1).")]
+        [SerializeField, Tooltip("Quanto risponde il kart in aria alla direzione desiderata (0-1).")]
         [Range(0f, 1f)]
         private float airControl = 0.3f;
 
@@ -85,7 +100,7 @@ namespace ArcadeKart.Core
 
         [SerializeField, Tooltip("Angolo massimo (gradi) della superficie considerata terreno. Oltre questo valore e' un muro: il kart non ci sale e scivola giu'.")]
         [Range(0f, 89f)]
-        private float maxGroundSlopeAngle = 45f;
+        private float maxGroundSlopeAngle = 80f;
 
         [SerializeField, Tooltip("Piccolo tempo di tolleranza prima di perdere lo stato grounded.")]
         private float groundedGraceTime = 0.08f;
@@ -100,7 +115,7 @@ namespace ArcadeKart.Core
         private float suspensionDamping = 12f;
 
         [Header("Wall Avoidance")]
-        [SerializeField, Tooltip("Tempo di tolleranza in cui il contatto col muro resta attivo anche se la collisione sfarfalla. Evita la salita a scatti (cricchetto).")]
+        [SerializeField, Tooltip("Tempo di tolleranza in cui il contatto col muro resta attivo anche se la collisione sfarfalla.")]
         private float wallContactGraceTime = 0.2f;
 
         [Header("Air Stability")]
@@ -154,11 +169,11 @@ namespace ArcadeKart.Core
         public bool IsGrounded { get; private set; }
 
         public bool IsDrifting =>
-            input != null &&
-            input.Drift &&
-            IsGrounded &&
-            Mathf.Abs(CurrentSpeed) >= driftMinSpeed &&
-            Mathf.Abs(input.Move.x) >= driftMinSteer;
+            input != null
+            && input.Drift
+            && IsGrounded
+            && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
+            && input.Move.sqrMagnitude >= driftMinSteer * driftMinSteer;
 
         public void ApplyBoost(float magnitude, float duration) =>
             StartMultiplier(Mathf.Max(1f, magnitude), duration);
@@ -225,6 +240,7 @@ namespace ArcadeKart.Core
             HandleLandingStabilization(wasGroundedLastFrame);
             ApplySuspension();
             ApplyAirStabilization();
+            UpdateCameraRelativeMoveDirection();
             UpdateSteering();
             UpdateVelocity();
         }
@@ -319,9 +335,10 @@ namespace ArcadeKart.Core
         private float lastWallContactTime = -999f;
         private Vector3 steepWallNormal;
         private Vector3 steepWallPoint;
-
         private Vector3 lastValidGroundUp = Vector3.up;
         private bool hasValidGroundUp;
+        private Vector3 desiredMoveDirection;
+        private float desiredMoveAmount;
 
         private bool WallContactActive => (Time.time - lastWallContactTime) <= wallContactGraceTime;
 
@@ -396,10 +413,65 @@ namespace ArcadeKart.Core
             rb.AddForce(Vector3.up * totalForce, ForceMode.Acceleration);
         }
 
+        private void UpdateCameraRelativeMoveDirection()
+        {
+            Vector2 moveInput = input.Move;
+            desiredMoveAmount = Mathf.Clamp01(moveInput.magnitude);
+
+            if (desiredMoveAmount <= 0.001f)
+            {
+                desiredMoveDirection = Vector3.zero;
+                return;
+            }
+
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                Vector3 fallback = new Vector3(moveInput.x, 0f, moveInput.y);
+                desiredMoveDirection = fallback.normalized;
+                return;
+            }
+
+            Vector3 camForward = cam.transform.forward;
+            Vector3 camRight = cam.transform.right;
+
+            camForward.y = 0f;
+            camRight.y = 0f;
+
+            camForward.Normalize();
+            camRight.Normalize();
+
+            Vector3 move =
+                camForward * moveInput.y +
+                camRight * moveInput.x;
+
+            if (move.sqrMagnitude <= 0.001f)
+            {
+                desiredMoveDirection = Vector3.zero;
+                return;
+            }
+
+            desiredMoveDirection = move.normalized;
+        }
+
         private void UpdateSteering()
         {
-            float speedRatio = Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed);
-            float effectiveTurn = turnRate * Mathf.Lerp(turnAtRest, 1f, Mathf.Clamp01(speedRatio));
+            if (desiredMoveDirection.sqrMagnitude <= 0.001f)
+                return;
+
+            Vector3 currentForward = transform.forward;
+            currentForward.y = 0f;
+            currentForward.Normalize();
+
+            Vector3 desiredForward = desiredMoveDirection;
+            desiredForward.y = 0f;
+            desiredForward.Normalize();
+
+            float signedAngle = Vector3.SignedAngle(currentForward, desiredForward, Vector3.up);
+            float normalizedTurnInput = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
+
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
+            float effectiveTurn = turnRate * Mathf.Lerp(turnAtRest, 1f, speedRatio);
 
             if (!IsGrounded)
                 effectiveTurn *= airControl;
@@ -407,8 +479,14 @@ namespace ArcadeKart.Core
             if (input.Drift && IsGrounded)
                 effectiveTurn *= driftSteerBoost;
 
-            float steerInput = (CurrentSpeed < 0f) ? -input.Move.x : input.Move.x;
-            transform.Rotate(0f, steerInput * effectiveTurn * Time.fixedDeltaTime, 0f, Space.World);
+            float steerLossMultiplier = Mathf.Lerp(1f, 1f - shoppingCartSteerLoss, speedRatio);
+            effectiveTurn *= steerLossMultiplier;
+
+            float maxStep = effectiveTurn * Time.fixedDeltaTime;
+            float appliedYaw = Mathf.Clamp(signedAngle, -maxStep, maxStep);
+
+            transform.Rotate(0f, appliedYaw, 0f, Space.World);
+            lastSteerAmount = Mathf.Abs(normalizedTurnInput);
         }
 
         private void UpdateVelocity()
@@ -418,10 +496,10 @@ namespace ArcadeKart.Core
             float forwardSpeed = localVelocity.z;
             float verticalSpeed = rb.linearVelocity.y;
 
-            float throttle = input.Move.y;
-            float maxForward = maxSpeed * speedMultiplier;
-            float targetForwardSpeed =
-                throttle >= 0f ? throttle * maxForward : throttle * reverseSpeed;
+            float targetForwardSpeed = desiredMoveAmount * maxSpeed * speedMultiplier;
+
+            if (desiredMoveAmount <= 0.001f)
+                targetForwardSpeed = 0f;
 
             float forwardRate =
                 (Mathf.Abs(targetForwardSpeed) > Mathf.Abs(forwardSpeed))
@@ -441,10 +519,34 @@ namespace ArcadeKart.Core
             );
 
             float lateralFriction = groundLateralFriction;
+
             if (!IsGrounded)
+            {
                 lateralFriction = airLateralFriction;
+            }
             else if (IsDrifting)
+            {
                 lateralFriction = driftLateralFriction;
+            }
+
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
+
+            if (IsGrounded && lastSteerAmount > shoppingCartSlipSteerThreshold)
+            {
+                float steerFactor = Mathf.InverseLerp(
+                    shoppingCartSlipSteerThreshold,
+                    1f,
+                    lastSteerAmount
+                );
+
+                float slipMultiplier = Mathf.Lerp(
+                    1f,
+                    1f - shoppingCartSlip,
+                    speedRatio * steerFactor
+                );
+
+                lateralFriction *= slipMultiplier;
+            }
 
             lateralSpeed = Mathf.MoveTowards(
                 lateralSpeed,
@@ -455,9 +557,9 @@ namespace ArcadeKart.Core
             verticalSpeed -= gravity * Time.fixedDeltaTime;
 
             Vector3 finalVelocity =
-                transform.right * lateralSpeed
-                + transform.forward * forwardSpeed
-                + Vector3.up * verticalSpeed;
+                transform.right * lateralSpeed +
+                transform.forward * forwardSpeed +
+                Vector3.up * verticalSpeed;
 
             if (WallContactActive)
             {
@@ -486,9 +588,10 @@ namespace ArcadeKart.Core
 
             float targetYaw = 0f;
 
-            if (IsDrifting)
+            if (IsDrifting && desiredMoveDirection.sqrMagnitude > 0.001f)
             {
-                float steer = (CurrentSpeed < 0f) ? -input.Move.x : input.Move.x;
+                float signedAngle = Vector3.SignedAngle(transform.forward, desiredMoveDirection, Vector3.up);
+                float steer = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
                 targetYaw = steer * driftVisualYawDegrees;
             }
 
@@ -693,6 +796,8 @@ namespace ArcadeKart.Core
             speedMultiplier = 1f;
             multiplierRoutine = null;
         }
+
+        private float lastSteerAmount;
 
         #endregion
     }
