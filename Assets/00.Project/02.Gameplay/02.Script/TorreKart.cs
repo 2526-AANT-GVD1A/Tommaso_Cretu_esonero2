@@ -39,6 +39,9 @@ namespace ArcadeKart.Gameplay
 
         private readonly List<GameObject> spawnedItems = new List<GameObject>();
 
+        public Transform StackRoot => stackRoot;
+        public int ItemCount => spawnedItems.Count;
+
         public void AddCollectedItem(string visualType)
         {
             if (string.IsNullOrWhiteSpace(visualType))
