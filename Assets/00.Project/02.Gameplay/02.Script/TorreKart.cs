@@ -33,6 +33,10 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Rotazione locale degli elementi impilati.")]
         private Vector3 localEuler = Vector3.zero;
 
+        [Header("Limit")]
+        [SerializeField, Tooltip("Numero massimo di oggetti visibili nella torre.")]
+        private int maxItems = 5;
+
         [Header("Type Mapping")]
         [SerializeField, Tooltip("Associazione tipo -> prefab visivo.")]
         private List<VisualEntry> visuals = new List<VisualEntry>();
@@ -63,15 +67,18 @@ namespace ArcadeKart.Gameplay
                 return;
             }
 
+            if (maxItems > 0 && spawnedItems.Count >= maxItems)
+                RemoveOldestItem();
+
             GameObject item = Instantiate(entry.visualPrefab, stackRoot);
-            item.name = "Stack_" + visualType + "_" + spawnedItems.Count;
+            item.name = "Stack_" + visualType + "_" + Time.frameCount;
 
             Transform t = item.transform;
-            t.localPosition = baseLocalOffset + Vector3.up * (verticalSpacing * spawnedItems.Count);
             t.localRotation = Quaternion.Euler(localEuler);
             t.localScale = entry.localScale;
 
             spawnedItems.Add(item);
+            RefreshStackLayout();
         }
 
         public void ClearAll()
@@ -83,6 +90,31 @@ namespace ArcadeKart.Gameplay
             }
 
             spawnedItems.Clear();
+        }
+
+        private void RemoveOldestItem()
+        {
+            if (spawnedItems.Count == 0)
+                return;
+
+            GameObject oldest = spawnedItems[0];
+            spawnedItems.RemoveAt(0);
+
+            if (oldest != null)
+                Destroy(oldest);
+        }
+
+        private void RefreshStackLayout()
+        {
+            for (int i = 0; i < spawnedItems.Count; i++)
+            {
+                if (spawnedItems[i] == null)
+                    continue;
+
+                Transform t = spawnedItems[i].transform;
+                t.localPosition = baseLocalOffset + Vector3.up * (verticalSpacing * i);
+                t.localRotation = Quaternion.Euler(localEuler);
+            }
         }
 
         private VisualEntry FindEntry(string visualType)

@@ -487,7 +487,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualType: Ogg1
   requiredTag: Player
-  destroyOnPickup: 1
+  flyDuration: 0.35
+  arcHeight: 1.25
+  spinDegreesPerSecond: {x: 0, y: 360, z: 0}
+  shrinkOnFly: 1
+  endScaleMultiplier: 0.75
 --- !u!1 &162107671
 GameObject:
   m_ObjectHideFlags: 0
@@ -2170,7 +2174,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualType: Ogg1
   requiredTag: Player
-  destroyOnPickup: 1
+  flyDuration: 0.35
+  arcHeight: 1.25
+  spinDegreesPerSecond: {x: 0, y: 360, z: 0}
+  shrinkOnFly: 1
+  endScaleMultiplier: 0.75
 --- !u!1 &1232089747
 GameObject:
   m_ObjectHideFlags: 0
@@ -2304,7 +2312,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualType: Ogg1
   requiredTag: Player
-  destroyOnPickup: 1
+  flyDuration: 0.35
+  arcHeight: 1.25
+  spinDegreesPerSecond: {x: 0, y: 360, z: 0}
+  shrinkOnFly: 1
+  endScaleMultiplier: 0.75
 --- !u!1 &1269313299 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 7420827064338147709, guid: 506aec428ba843d349660c0911bb3e9b, type: 3}
@@ -2329,7 +2341,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualType: Ogg1
   requiredTag: Player
-  destroyOnPickup: 1
+  flyDuration: 0.35
+  arcHeight: 1.25
+  spinDegreesPerSecond: {x: 0, y: 360, z: 0}
+  shrinkOnFly: 1
+  endScaleMultiplier: 0.75
 --- !u!1 &1368306414
 GameObject:
   m_ObjectHideFlags: 0
@@ -2462,7 +2478,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualType: Ogg1
   requiredTag: Player
-  destroyOnPickup: 1
+  flyDuration: 0.35
+  arcHeight: 1.25
+  spinDegreesPerSecond: {x: 0, y: 360, z: 0}
+  shrinkOnFly: 1
+  endScaleMultiplier: 0.75
 --- !u!1 &1431995324
 GameObject:
   m_ObjectHideFlags: 0
@@ -2737,6 +2757,7 @@ MonoBehaviour:
   baseLocalOffset: {x: 0, y: 0, z: 0}
   verticalSpacing: 0.35
   localEuler: {x: 0, y: 0, z: 0}
+  maxItems: 4
   visuals:
   - visualType: Ogg1
     visualPrefab: {fileID: 6515598176592708606}
@@ -4721,7 +4742,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualType: Ogg1
   requiredTag: Player
-  destroyOnPickup: 1
+  flyDuration: 0.35
+  arcHeight: 1.25
+  spinDegreesPerSecond: {x: 0, y: 360, z: 0}
+  shrinkOnFly: 1
+  endScaleMultiplier: 0.75
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
