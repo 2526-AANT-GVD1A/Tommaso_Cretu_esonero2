@@ -2624,12 +2624,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6412b4aca046a92789dc440ab2be8237, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxSpeed: 30
+  maxSpeed: 20
   acceleration: 10
   deceleration: 10
   reverseSpeed: 0
   brakeStrength: 18
-  turnRate: 700
+  turnRate: 1000
   turnAtRest: 0.2
   shoppingCartSteerLoss: 0.65
   shoppingCartSlip: 0.75
