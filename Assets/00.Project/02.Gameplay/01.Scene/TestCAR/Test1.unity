@@ -2480,6 +2480,8 @@ MonoBehaviour:
   rearRightGroundProbe: {fileID: 1668862069}
   visualGroundAlignDistance: 1
   groundAlignLerpSpeed: 20
+  visualYawSmoothTime: 0.15
+  visualYawMaxTurnSpeed: 60
   impactThreshold: 5
   OnGroundedChanged:
     m_PersistentCalls:

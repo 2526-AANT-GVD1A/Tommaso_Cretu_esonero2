@@ -171,6 +171,12 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' di allineamento del mesh alla pendenza del terreno.")]
         private float groundAlignLerpSpeed = 10f;
 
+        [SerializeField, Tooltip("Tempo (sec) con cui il modello rincorre la rotazione del corpo. Piu' alto = oscillazioni lunghe e fluide; piu' basso = modello incollato al corpo.")]
+        private float visualYawSmoothTime = 0.15f;
+
+        [SerializeField, Tooltip("Velocita' massima (gradi/sec) con cui il muso del modello ruota verso la direzione di sterzo. Il corpo fisico puo' scattare piu' in fretta (es. inversioni): il modello oscilla a questa velocita' costante invece di seguirlo.")]
+        private float visualYawMaxTurnSpeed = 400f;
+
         [Header("Impact")]
         [SerializeField, Tooltip("Velocita' minima di urto per invocare OnImpact.")]
         private float impactThreshold = 5f;
@@ -210,6 +216,10 @@ namespace ArcadeKart.Core
             rb.angularVelocity = Vector3.zero;
             CurrentSpeed = 0f;
             transform.SetPositionAndRotation(position, rotation);
+            visualYawDegrees = rotation.eulerAngles.y;
+            visualYawVelocity = 0f;
+            hasVisualYawDegrees = true;
+            hasVisualWorldRotation = false;
         }
 
         public void RespawnAt(Transform t)
@@ -231,7 +241,12 @@ namespace ArcadeKart.Core
         {
             rb = GetComponent<Rigidbody>();
             rb.useGravity = false;
-            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            // NESSUNA interpolazione: grafica (il visual) e' figlia del rigidbody e
+            // viene ruotata in world space in LateUpdate. Con Interpolate attivo,
+            // durante le inversioni (corpo che ruota ~49 gradi/step) il render
+            // interpola la posa del padre DOPO la nostra scrittura e trascina il
+            // muso di ~30 gradi in un frame: il famoso "scatto verso il mezzo".
+            rb.interpolation = RigidbodyInterpolation.None;
             rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
             rb.constraints =
                 RigidbodyConstraints.FreezeRotationX |
@@ -255,6 +270,10 @@ namespace ArcadeKart.Core
 
             lastValidGroundUp = Vector3.up;
             hasValidGroundUp = true;
+
+            visualYawDegrees = transform.eulerAngles.y;
+            visualYawVelocity = 0f;
+            hasVisualYawDegrees = true;
         }
 
         private void FixedUpdate()
@@ -274,7 +293,53 @@ namespace ArcadeKart.Core
         {
             UpdateDriftVisual();
             UpdateGroundAlignmentVisual();
+
+#if UNITY_EDITOR
+            float debugMeshYaw = driftVisual != null ? driftVisual.eulerAngles.y : 0f;
+            debugMeshYawDelta = Mathf.DeltaAngle(debugPrevMeshYaw, debugMeshYaw);
+            debugPrevMeshYaw = debugMeshYaw;
+
+            if (Mathf.Abs(debugMeshYawDelta) > 3f)
+            {
+                Debug.Log(
+                    "[KartDebug] SCATTO frame " + Time.frameCount +
+                    " | salto " + debugMeshYawDelta.ToString("F1") +
+                    " | mesh " + debugMeshYaw.ToString("F1") +
+                    " | visual " + visualYawDegrees.ToString("F1") +
+                    " | body " + transform.eulerAngles.y.ToString("F1") +
+                    " | dt " + (Time.deltaTime * 1000f).ToString("F1") + "ms" +
+                    " | tilt " + debugTargetUpTilt.ToString("F1") +
+                    " | driftYaw " + currentDriftYaw.ToString("F1") +
+                    " | proj " + debugProjSqrMagnitude.ToString("F3") +
+                    " | desired " + (desiredMoveDirection.sqrMagnitude > 0.001f ? "si" : "NO")
+                );
+            }
+#endif
         }
+
+#if UNITY_EDITOR
+        // DEBUG TEMPORANEO: overlay per diagnosticare lo scatto del muso nelle inversioni.
+        // Rimuovere quando il problema e' risolto.
+        private float debugPrevMeshYaw;
+        private float debugMeshYawDelta;
+        private float debugTargetUpTilt;
+        private float debugProjSqrMagnitude;
+
+        private void OnGUI()
+        {
+            float meshYaw = driftVisual != null ? driftVisual.eulerAngles.y : -1f;
+
+            GUI.Box(new Rect(10f, 10f, 400f, 190f), "Kart Debug (temporaneo)");
+            GUILayout.BeginArea(new Rect(20f, 40f, 380f, 160f));
+            GUILayout.Label("Frame: " + (Time.unscaledDeltaTime * 1000f).ToString("F0") + " ms");
+            GUILayout.Label("Mesh yaw: " + meshYaw.ToString("F1") + "  (salto in questo frame: " + debugMeshYawDelta.ToString("F1") + ")");
+            GUILayout.Label("Visual yaw (smussato): " + visualYawDegrees.ToString("F1"));
+            GUILayout.Label("Body yaw (fisica): " + transform.eulerAngles.y.ToString("F1"));
+            GUILayout.Label("Tilt up terreno: " + debugTargetUpTilt.ToString("F1"));
+            GUILayout.Label("WallContactActive: " + WallContactActive);
+            GUILayout.EndArea();
+        }
+#endif
 
         private void OnCollisionEnter(Collision collision)
         {
@@ -351,6 +416,11 @@ namespace ArcadeKart.Core
         private float lastReportedSpeed;
         private Quaternion driftVisualBaseRotation = Quaternion.identity;
         private float currentDriftYaw;
+        private float visualYawDegrees;
+        private float visualYawVelocity;
+        private bool hasVisualYawDegrees;
+        private Quaternion visualWorldRotation = Quaternion.identity;
+        private bool hasVisualWorldRotation;
         private RaycastHit groundHit;
         private float lastGroundedTime;
         private bool hasGroundContactThisFrame;
@@ -749,13 +819,43 @@ namespace ArcadeKart.Core
                 }
             }
 
+#if UNITY_EDITOR
+            debugTargetUpTilt = Vector3.Angle(targetUp, Vector3.up);
+#endif
+
+            // Durante le inversioni il corpo ruota a scatti (fisica voluta):
+            // il muso invece punta la direzione di sterzo e ci arriva a velocita'
+            // costante (visualYawMaxTurnSpeed), senza scatti ne' trascinamenti.
+            // In drift resta agganciato al corpo per preservare il visual del drift.
+            float targetYaw =
+                !IsDrifting && desiredMoveDirection.sqrMagnitude > 0.001f
+                    ? Mathf.Atan2(desiredMoveDirection.x, desiredMoveDirection.z) * Mathf.Rad2Deg
+                    : transform.eulerAngles.y;
+
+            if (!hasVisualYawDegrees)
+            {
+                visualYawDegrees = targetYaw;
+                hasVisualYawDegrees = true;
+            }
+            visualYawDegrees = Mathf.MoveTowardsAngle(
+                visualYawDegrees,
+                targetYaw,
+                visualYawMaxTurnSpeed * Time.deltaTime
+            );
+
             Vector3 yawForward =
-                transform.rotation *
+                Quaternion.Euler(0f, visualYawDegrees, 0f) *
                 driftVisualBaseRotation *
                 Quaternion.Euler(0f, currentDriftYaw, 0f) *
                 Vector3.forward;
 
-            Vector3 projectedForward = Vector3.ProjectOnPlane(yawForward, targetUp).normalized;
+            Vector3 projectedForward = Vector3.ProjectOnPlane(yawForward, targetUp);
+
+#if UNITY_EDITOR
+            debugProjSqrMagnitude = projectedForward.sqrMagnitude;
+#endif
+
+            projectedForward = projectedForward.normalized;
 
             if (projectedForward.sqrMagnitude < 0.001f)
                 projectedForward = Vector3.ProjectOnPlane(transform.forward, targetUp).normalized;
@@ -765,11 +865,22 @@ namespace ArcadeKart.Core
 
             Quaternion targetWorldRotation = Quaternion.LookRotation(projectedForward, targetUp);
 
-            driftVisual.rotation = Quaternion.Slerp(
-                driftVisual.rotation,
+            // grafica e' figlia del corpo: ad ogni FixedUpdate il padre la trascina
+            // con la propria rotazione (nelle inversioni anche ~50 gradi/step).
+            // Se il slerp parte dal valore gia' trascinato, l'errore resta e si vede
+            // come uno scatto. Partiamo invece da uno stato nostro: la scrittura
+            // annulla il trascinamento completamente ad ogni frame.
+            if (!hasVisualWorldRotation)
+            {
+                visualWorldRotation = targetWorldRotation;
+                hasVisualWorldRotation = true;
+            }
+            visualWorldRotation = Quaternion.Slerp(
+                visualWorldRotation,
                 targetWorldRotation,
                 1f - Mathf.Exp(-groundAlignLerpSpeed * Time.deltaTime)
             );
+            driftVisual.rotation = visualWorldRotation;
         }
 
         private bool TrySphereCastGround(
