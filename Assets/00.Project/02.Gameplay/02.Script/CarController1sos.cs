@@ -49,6 +49,29 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' con cui il kart ruota verso la direzione desiderata letta dalla camera.")]
         private float cameraRelativeTurnResponsiveness = 10f;
 
+        [Header("Reorientation")]
+        [SerializeField, Tooltip("Sotto questa velocita' il kart e' considerato quasi fermo.")]
+        private float rotateBeforeMoveSpeedThreshold = 0.35f;
+
+        [SerializeField, Tooltip("Se il kart e' quasi fermo, deve prima girarsi sotto questo angolo per poter accelerare.")]
+        private float rotateBeforeMoveReleaseAngle = 10f;
+
+        [SerializeField, Tooltip("Angolo oltre il quale, in corsa, il cambio direzione viene trattato come inversione forte.")]
+        private float movingReorientationEnterAngle = 135f;
+
+        [SerializeField, Tooltip("Quando l'angolo scende sotto questo valore, il kart torna a spingere nella nuova direzione.")]
+        private float movingReorientationExitAngle = 22f;
+
+        [SerializeField, Tooltip("Velocita' planare minima per attivare la reorientation mentre sei in corsa.")]
+        private float movingReorientationMinSpeed = 4f;
+
+        [SerializeField, Tooltip("Quanto viene ridotta la nuova accelerazione mentre il kart si sta riallineando in corsa. 0 = nessuna spinta nuova.")]
+        [Range(0f, 1f)]
+        private float movingReorientationAccelerationFactor = 0.05f;
+
+        [SerializeField, Tooltip("Extra frenata sul forward locale mentre il kart si riallinea in corsa.")]
+        private float movingReorientationBrakeStrength = 20f;
+
         [Header("Grip / Drift")]
         [SerializeField, Tooltip("Grip laterale normale a terra. Alto = il kart si riallinea meglio.")]
         private float groundLateralFriction = 14f;
@@ -211,7 +234,8 @@ namespace ArcadeKart.Core
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
             rb.constraints =
-                RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+                RigidbodyConstraints.FreezeRotationX |
+                RigidbodyConstraints.FreezeRotationZ;
 
             input = GetComponent<KartInput>();
 
@@ -227,9 +251,10 @@ namespace ArcadeKart.Core
             if (driftVisual != null)
             {
                 driftVisualBaseRotation = driftVisual.localRotation;
-                lastValidGroundUp = Vector3.up;
-                hasValidGroundUp = true;
             }
+
+            lastValidGroundUp = Vector3.up;
+            hasValidGroundUp = true;
         }
 
         private void FixedUpdate()
@@ -264,14 +289,15 @@ namespace ArcadeKart.Core
 
             for (int i = 0; i < collision.contactCount; i++)
             {
-                Vector3 n = collision.GetContact(i).normal;
+                ContactPoint contact = collision.GetContact(i);
+                Vector3 n = contact.normal;
                 float angle = Vector3.Angle(n, Vector3.up);
 
                 if (angle > steepestAngle)
                 {
                     steepestAngle = angle;
                     steepWallNormal = n;
-                    steepWallPoint = collision.GetContact(i).point;
+                    steepWallPoint = contact.point;
                     lastWallContactTime = Time.time;
                 }
             }
@@ -339,6 +365,10 @@ namespace ArcadeKart.Core
         private bool hasValidGroundUp;
         private Vector3 desiredMoveDirection;
         private float desiredMoveAmount;
+        private float lastSteerAmount;
+        private float currentSignedAngleToDesired;
+        private bool isReorientingFromStop;
+        private bool isReorientingWhileMoving;
 
         private bool WallContactActive => (Time.time - lastWallContactTime) <= wallContactGraceTime;
 
@@ -456,6 +486,11 @@ namespace ArcadeKart.Core
 
         private void UpdateSteering()
         {
+            currentSignedAngleToDesired = 0f;
+            lastSteerAmount = 0f;
+            isReorientingFromStop = false;
+            isReorientingWhileMoving = false;
+
             if (desiredMoveDirection.sqrMagnitude <= 0.001f)
                 return;
 
@@ -468,10 +503,48 @@ namespace ArcadeKart.Core
             desiredForward.Normalize();
 
             float signedAngle = Vector3.SignedAngle(currentForward, desiredForward, Vector3.up);
+            float absAngle = Mathf.Abs(signedAngle);
+            currentSignedAngleToDesired = signedAngle;
+
+            Vector3 planarVelocity = rb.linearVelocity;
+            planarVelocity.y = 0f;
+            float planarSpeed = planarVelocity.magnitude;
+
+            bool nearStopped = planarSpeed <= rotateBeforeMoveSpeedThreshold;
+            bool movingFastEnough = planarSpeed >= movingReorientationMinSpeed;
+
+            if (nearStopped && absAngle > rotateBeforeMoveReleaseAngle)
+            {
+                isReorientingFromStop = true;
+            }
+            else if (
+                IsGrounded &&
+                movingFastEnough &&
+                absAngle >= movingReorientationEnterAngle &&
+                desiredMoveAmount > 0.001f
+            )
+            {
+                isReorientingWhileMoving = true;
+            }
+            else if (
+                IsGrounded &&
+                movingFastEnough &&
+                absAngle > movingReorientationExitAngle &&
+                Vector3.Dot(currentForward, desiredForward) < 0f
+            )
+            {
+                isReorientingWhileMoving = true;
+            }
+
             float normalizedTurnInput = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
 
             float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
             float effectiveTurn = turnRate * Mathf.Lerp(turnAtRest, 1f, speedRatio);
+
+            if (isReorientingFromStop || isReorientingWhileMoving)
+            {
+                effectiveTurn = Mathf.Max(effectiveTurn, turnRate * cameraRelativeTurnResponsiveness);
+            }
 
             if (!IsGrounded)
                 effectiveTurn *= airControl;
@@ -496,15 +569,35 @@ namespace ArcadeKart.Core
             float forwardSpeed = localVelocity.z;
             float verticalSpeed = rb.linearVelocity.y;
 
+            float absAngle = Mathf.Abs(currentSignedAngleToDesired);
             float targetForwardSpeed = desiredMoveAmount * maxSpeed * speedMultiplier;
 
             if (desiredMoveAmount <= 0.001f)
+            {
                 targetForwardSpeed = 0f;
+            }
+            else
+            {
+                if (isReorientingFromStop && absAngle > rotateBeforeMoveReleaseAngle)
+                {
+                    targetForwardSpeed = 0f;
+                }
+                else if (isReorientingWhileMoving && absAngle > movingReorientationExitAngle)
+                {
+                    float limitedTarget = desiredMoveAmount * maxSpeed * speedMultiplier * movingReorientationAccelerationFactor;
+                    targetForwardSpeed = limitedTarget;
+                }
+            }
 
             float forwardRate =
                 (Mathf.Abs(targetForwardSpeed) > Mathf.Abs(forwardSpeed))
-                    ? acceleration
-                    : deceleration;
+                ? acceleration
+                : deceleration;
+
+            if (isReorientingWhileMoving && absAngle > movingReorientationExitAngle)
+            {
+                forwardRate = Mathf.Max(forwardRate, movingReorientationBrakeStrength);
+            }
 
             if (input.Brake)
             {
@@ -561,6 +654,17 @@ namespace ArcadeKart.Core
                 transform.forward * forwardSpeed +
                 Vector3.up * verticalSpeed;
 
+            Vector3 planarFinal = finalVelocity;
+            planarFinal.y = 0f;
+            float planarMax = maxSpeed * speedMultiplier;
+
+            if (planarFinal.magnitude > planarMax)
+            {
+                planarFinal = planarFinal.normalized * planarMax;
+                finalVelocity.x = planarFinal.x;
+                finalVelocity.z = planarFinal.z;
+            }
+
             if (WallContactActive)
             {
                 float intoWall = Vector3.Dot(finalVelocity, steepWallNormal);
@@ -572,7 +676,9 @@ namespace ArcadeKart.Core
             }
 
             rb.linearVelocity = finalVelocity;
-            CurrentSpeed = forwardSpeed;
+
+            Vector3 localFinal = transform.InverseTransformDirection(finalVelocity);
+            CurrentSpeed = localFinal.z;
 
             if (Mathf.Abs(CurrentSpeed - lastReportedSpeed) > 0.05f)
             {
@@ -796,8 +902,6 @@ namespace ArcadeKart.Core
             speedMultiplier = 1f;
             multiplierRoutine = null;
         }
-
-        private float lastSteerAmount;
 
         #endregion
     }
