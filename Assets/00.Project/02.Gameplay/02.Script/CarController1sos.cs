@@ -294,52 +294,10 @@ namespace ArcadeKart.Core
             UpdateDriftVisual();
             UpdateGroundAlignmentVisual();
 
-#if UNITY_EDITOR
-            float debugMeshYaw = driftVisual != null ? driftVisual.eulerAngles.y : 0f;
-            debugMeshYawDelta = Mathf.DeltaAngle(debugPrevMeshYaw, debugMeshYaw);
-            debugPrevMeshYaw = debugMeshYaw;
 
-            if (Mathf.Abs(debugMeshYawDelta) > 3f)
-            {
-                Debug.Log(
-                    "[KartDebug] SCATTO frame " + Time.frameCount +
-                    " | salto " + debugMeshYawDelta.ToString("F1") +
-                    " | mesh " + debugMeshYaw.ToString("F1") +
-                    " | visual " + visualYawDegrees.ToString("F1") +
-                    " | body " + transform.eulerAngles.y.ToString("F1") +
-                    " | dt " + (Time.deltaTime * 1000f).ToString("F1") + "ms" +
-                    " | tilt " + debugTargetUpTilt.ToString("F1") +
-                    " | driftYaw " + currentDriftYaw.ToString("F1") +
-                    " | proj " + debugProjSqrMagnitude.ToString("F3") +
-                    " | desired " + (desiredMoveDirection.sqrMagnitude > 0.001f ? "si" : "NO")
-                );
-            }
-#endif
         }
 
-#if UNITY_EDITOR
-        // DEBUG TEMPORANEO: overlay per diagnosticare lo scatto del muso nelle inversioni.
-        // Rimuovere quando il problema e' risolto.
-        private float debugPrevMeshYaw;
-        private float debugMeshYawDelta;
-        private float debugTargetUpTilt;
-        private float debugProjSqrMagnitude;
 
-        private void OnGUI()
-        {
-            float meshYaw = driftVisual != null ? driftVisual.eulerAngles.y : -1f;
-
-            GUI.Box(new Rect(10f, 10f, 400f, 190f), "Kart Debug (temporaneo)");
-            GUILayout.BeginArea(new Rect(20f, 40f, 380f, 160f));
-            GUILayout.Label("Frame: " + (Time.unscaledDeltaTime * 1000f).ToString("F0") + " ms");
-            GUILayout.Label("Mesh yaw: " + meshYaw.ToString("F1") + "  (salto in questo frame: " + debugMeshYawDelta.ToString("F1") + ")");
-            GUILayout.Label("Visual yaw (smussato): " + visualYawDegrees.ToString("F1"));
-            GUILayout.Label("Body yaw (fisica): " + transform.eulerAngles.y.ToString("F1"));
-            GUILayout.Label("Tilt up terreno: " + debugTargetUpTilt.ToString("F1"));
-            GUILayout.Label("WallContactActive: " + WallContactActive);
-            GUILayout.EndArea();
-        }
-#endif
 
         private void OnCollisionEnter(Collision collision)
         {
@@ -389,12 +347,6 @@ namespace ArcadeKart.Core
             DrawProbeGizmo(rearLeftGroundProbe);
             DrawProbeGizmo(rearRightGroundProbe);
 
-            if (hasDebugGroundHit)
-            {
-                Gizmos.color = debugGroundHitWalkable ? Color.green : Color.red;
-                Gizmos.DrawLine(debugGroundHitPoint, debugGroundHitPoint + debugGroundHitNormal);
-                Gizmos.DrawWireSphere(debugGroundHitPoint, 0.06f);
-            }
 
             if (Application.isPlaying && WallContactActive)
             {
@@ -424,10 +376,7 @@ namespace ArcadeKart.Core
         private RaycastHit groundHit;
         private float lastGroundedTime;
         private bool hasGroundContactThisFrame;
-        private bool hasDebugGroundHit;
-        private Vector3 debugGroundHitPoint;
-        private Vector3 debugGroundHitNormal;
-        private bool debugGroundHitWalkable;
+
         private float lastWallContactTime = -999f;
         private Vector3 steepWallNormal;
         private Vector3 steepWallPoint;
@@ -819,9 +768,6 @@ namespace ArcadeKart.Core
                 }
             }
 
-#if UNITY_EDITOR
-            debugTargetUpTilt = Vector3.Angle(targetUp, Vector3.up);
-#endif
 
             // Durante le inversioni il corpo ruota a scatti (fisica voluta):
             // il muso invece punta la direzione di sterzo e ci arriva a velocita'
@@ -851,9 +797,6 @@ namespace ArcadeKart.Core
 
             Vector3 projectedForward = Vector3.ProjectOnPlane(yawForward, targetUp);
 
-#if UNITY_EDITOR
-            debugProjSqrMagnitude = projectedForward.sqrMagnitude;
-#endif
 
             projectedForward = projectedForward.normalized;
 
@@ -905,7 +848,7 @@ namespace ArcadeKart.Core
             float bestWalkableDistance = float.MaxValue;
             float bestAnyDistance = float.MaxValue;
             bool found = false;
-            hasDebugGroundHit = false;
+
 
             for (int i = 0; i < hits.Length; i++)
             {
@@ -923,10 +866,7 @@ namespace ArcadeKart.Core
                 if (hit.distance < bestAnyDistance)
                 {
                     bestAnyDistance = hit.distance;
-                    debugGroundHitPoint = hit.point;
-                    debugGroundHitNormal = hit.normal;
-                    debugGroundHitWalkable = walkable;
-                    hasDebugGroundHit = true;
+
                 }
 
                 if (!walkable)

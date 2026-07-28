@@ -2431,11 +2431,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxSpeed: 10
-  acceleration: 19
+  acceleration: 10
   deceleration: 10
   reverseSpeed: 0
   brakeStrength: 18
-  turnRate: 700
+  turnRate: 400
   turnAtRest: 0.72
   shoppingCartSteerLoss: 0.65
   shoppingCartSlip: 0.75
@@ -2481,7 +2481,7 @@ MonoBehaviour:
   visualGroundAlignDistance: 1
   groundAlignLerpSpeed: 20
   visualYawSmoothTime: 0.15
-  visualYawMaxTurnSpeed: 60
+  visualYawMaxTurnSpeed: 500
   impactThreshold: 5
   OnGroundedChanged:
     m_PersistentCalls:
