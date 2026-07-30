@@ -50,6 +50,14 @@ namespace ArcadeKart.Core
         private float cameraRelativeTurnResponsiveness = 10f;
 
         [Header("Reorientation")]
+        [SerializeField, Tooltip("Soglia angolare (gradi) per il cambio direzione istantaneo. Sopra questo angolo il kart scatta subito verso la nuova direzione preservando la spinta longitudinale; sotto usa la sterzata graduale con drift e slip 'carrello della spesa'. 360 = mai snap (comportamento originale).")]
+        [Range(0f, 360f)]
+        private float instantRealignAngle = 90f;
+
+        [SerializeField, Tooltip("Quanta della spinta longitudinale	vecchia viene reindirizzata lungo il nuovo forward durante uno snap. 1 = cambio direzione pulito, nessun residuo; <1 = parte della velocita' resta nel verso di prima e decresce naturalmente con il grip (derapata post-snap stile 'carrello della spesa').")]
+        [Range(0f, 1f)]
+        private float instantRealignLongitudinalRetention = 0.6f;
+
         [SerializeField, Tooltip("Sotto questa velocita' il kart e' considerato quasi fermo.")]
         private float rotateBeforeMoveSpeedThreshold = 0.35f;
 
@@ -525,6 +533,46 @@ namespace ArcadeKart.Core
             float absAngle = Mathf.Abs(signedAngle);
             currentSignedAngleToDesired = signedAngle;
 
+            // SNAP ISTANTANEO per grandi cambi di direzione (inversioni, tornanti
+            // stretti, rotazioni ad O da fermo): ruoto subito il corpo di tutta
+            // l'angolatura residua e reindirizzo la componente longitudinale della
+            // velocity lungo il nuovo forward, preservando l'energia. La parte
+            // laterale preesistente viene lasciata al normale smorzamento della
+            // grip. Sotto la soglia si ricade nel comportamento graduale originale
+            // (carrello della spesa con slip e drift).
+            if (absAngle >= instantRealignAngle)
+            {
+                Vector3 vel = rb.linearVelocity;
+                Vector3 planarVel = new Vector3(vel.x, 0f, vel.z);
+                float fwdComp = Vector3.Dot(planarVel, currentForward);
+                Vector3 lateralRemainder = planarVel - currentForward * fwdComp;
+
+                transform.Rotate(0f, signedAngle, 0f, Space.World);
+
+                Vector3 newForwardXZ = transform.forward;
+                newForwardXZ.y = 0f;
+                newForwardXZ.Normalize();
+
+                float keptFwd = fwdComp * instantRealignLongitudinalRetention;
+                float residualFwd = fwdComp * (1f - instantRealignLongitudinalRetention);
+                Vector3 newPlanarVel =
+                    newForwardXZ * keptFwd
+                    + lateralRemainder
+                    + currentForward * residualFwd;
+
+                rb.linearVelocity = new Vector3(newPlanarVel.x, vel.y, newPlanarVel.z);
+
+                currentSignedAngleToDesired = 0f;
+                lastSteerAmount = 0f;
+                return;
+            }
+
+            // GRADUALE: comportamento originale per angoli piccoli. Il corpo
+            // ruota a turn-rate, mentre la velocity mondiale continua dritta:
+            // si apre un angolo fra forward e velocity e nasce lo slittamento
+            // laterale assorbito progressivamente dalla grip (carrello della
+            // spesa). shoppingCartSlip riduce la grip alle alte velocita' in
+            // curva e isDrifting la abbassa ulteriormente col tasto drift.
             Vector3 planarVelocity = rb.linearVelocity;
             planarVelocity.y = 0f;
             float planarSpeed = planarVelocity.magnitude;
