@@ -290,6 +290,7 @@ namespace ArcadeKart.Core
 
             UpdateGrounded();
             HandleLandingStabilization(wasGroundedLastFrame);
+            UpdateSkateRampLaunchState();
             ApplySuspension();
             ApplyAirStabilization();
             UpdateCameraRelativeMoveDirection();
@@ -326,6 +327,33 @@ namespace ArcadeKart.Core
 
                 if (angle > steepestAngle)
                 {
+                    // Distingue la parete verticale di una rampa da skate
+                    // (collider sul layer Ground) da un muro vero (Default):
+                    // sulla rampa non applichiamo il wall-avoidance; entriamo
+                    // invece in modalita' "lancio" balistica, conservando la
+                    // spinta residua e lasciando agire solo la gravita'.
+                    bool isGroundLayer =
+                        (groundLayer.value & (1 << contact.otherCollider.gameObject.layer)) != 0;
+
+                    if (isGroundLayer)
+                    {
+                        lastSkateRampContactTime = Time.time;
+                        // Cattura la velocity una sola volta, al momento del
+                        // primo contatto con la parete verticale. Usiamo
+                        // lastSetVelocity (la velocity che avevamo impostato nel
+                        // FixedUpdate precedente, PRIMA che il solver delle
+                        // collisioni rimuovesse la componente dentro-il-muro):
+                        // cosi' conserviamo l'orientamento reale del kart subito
+                        // prima di toccare la rampa e il lancio segue quella
+                        // direzione (anche in avvicinamento laterale).
+                        if (!skateRampLaunch)
+                        {
+                            skateRampLaunch = true;
+                            launchVelocity = lastSetVelocity;
+                        }
+                        continue;
+                    }
+
                     steepestAngle = angle;
                     steepWallNormal = n;
                     steepWallPoint = contact.point;
@@ -388,6 +416,10 @@ namespace ArcadeKart.Core
         private float lastWallContactTime = -999f;
         private Vector3 steepWallNormal;
         private Vector3 steepWallPoint;
+        private bool skateRampLaunch;
+        private float lastSkateRampContactTime = -999f;
+        private Vector3 launchVelocity;
+        private Vector3 lastSetVelocity;
         private Vector3 lastValidGroundUp = Vector3.up;
         private bool hasValidGroundUp;
         private Vector3 desiredMoveDirection;
@@ -434,6 +466,37 @@ namespace ArcadeKart.Core
             }
         }
 
+private void UpdateSkateRampLaunchState()
+        {
+            if (!skateRampLaunch)
+                return;
+
+            // Finche' tocchiamo la parete verticale restiamo in lancio, anche se
+            // lo SphereCast verso il basso becca ancora la parte slopeata della
+            // rampa sotto di noi (e' "camminabile", quindi farebbe scattare
+            // IsGrounded, azzerando il lancio e riattivando sospensione/wall
+            // avoidance che respingono il kart sul muro). Solo quando ci siamo
+            // staccati dalla parete verticale accettiamo di nuovo il grounding.
+            bool stillTouchingWall =
+                (Time.time - lastSkateRampContactTime) <= wallContactGraceTime;
+
+            if (stillTouchingWall)
+                return;
+
+            // Siamo staccati dalla parete: se tocchiamo di nuovo terreno
+            // camminabile, fine del lancio, si riprende a guidare.
+            if (IsGrounded && hasGroundContactThisFrame)
+            {
+                skateRampLaunch = false;
+                return;
+            }
+
+            // Sicurezza: nessun contatto con la parete e non grounded -> usciamo
+            // comunque (la routine non e' piu' attiva).
+            if (!IsGrounded)
+                skateRampLaunch = false;
+        }
+
         private void ApplyAirStabilization()
         {
             if (IsGrounded)
@@ -452,6 +515,14 @@ namespace ArcadeKart.Core
 
         private void ApplySuspension()
         {
+            // Durante il lancio skate disattiviamo la sospensione: lo SphereCast
+            // centrale verso il basso becca ancora la parte slopeata della rampa
+            // sotto la parete verticale e la molla aggiungerebbe una spinta
+            // extra non dovuta (il kart schizzerebbe sul muro anche a bassa
+            // velocita'). In lancio vogliamo solo inerzia + gravita'.
+            if (skateRampLaunch)
+                return;
+
             if (!hasGroundContactThisFrame)
                 return;
 
@@ -517,6 +588,10 @@ namespace ArcadeKart.Core
             lastSteerAmount = 0f;
             isReorientingFromStop = false;
             isReorientingWhileMoving = false;
+
+            // Lancio skate: balistico, nessuno sterzo da input.
+            if (skateRampLaunch)
+                return;
 
             if (desiredMoveDirection.sqrMagnitude <= 0.001f)
                 return;
@@ -631,6 +706,29 @@ namespace ArcadeKart.Core
 
         private void UpdateVelocity()
         {
+            if (skateRampLaunch)
+            {
+                // Lancio skate: balistico puro. Conserviamo la spinta residua
+                // catturata al momento del primo contatto (launchVelocity) e
+                // applichiamo solo la gravita'. Nessuna accelerazione da input,
+                // nessun wall-avoidance, nessuna sospensione: il kart "scala"
+                // la parete verticale della rampa (layer Ground) seguendo
+                // l'orientamento che aveva subito prima di toccarla e ricade
+                // come uno skate.
+                launchVelocity.y -= gravity * Time.fixedDeltaTime;
+                rb.linearVelocity = launchVelocity;
+
+                Vector3 localVel = transform.InverseTransformDirection(launchVelocity);
+                CurrentSpeed = localVel.z;
+
+                if (Mathf.Abs(CurrentSpeed - lastReportedSpeed) > 0.05f)
+                {
+                    lastReportedSpeed = CurrentSpeed;
+                    OnSpeedChanged?.Invoke(CurrentSpeed);
+                }
+                return;
+            }
+
             Vector3 localVelocity = transform.InverseTransformDirection(rb.linearVelocity);
             float lateralSpeed = localVelocity.x;
             float forwardSpeed = localVelocity.z;
@@ -743,6 +841,7 @@ namespace ArcadeKart.Core
             }
 
             rb.linearVelocity = finalVelocity;
+            lastSetVelocity = finalVelocity;
 
             Vector3 localFinal = transform.InverseTransformDirection(finalVelocity);
             CurrentSpeed = localFinal.z;
