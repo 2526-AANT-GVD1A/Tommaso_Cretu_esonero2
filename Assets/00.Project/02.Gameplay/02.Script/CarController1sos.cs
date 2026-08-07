@@ -350,6 +350,36 @@ namespace ArcadeKart.Core
                         {
                             skateRampLaunch = true;
                             launchVelocity = lastSetVelocity;
+                            // Congela lo yaw orizzontale al momento del distacco:
+                            // durante il volo parabolico il muso non segue piu'
+                            // l'input del giocatore (lancio balistico), resta
+                            // fisso sulla direzione in cui abbiamo lasciato il muro.
+                            launchYaw = transform.eulerAngles.y;
+                            visualYawDegrees = launchYaw;
+                            // Cattura il PITCH dalla velocity (NON dalla posa del
+                            // visual, che potrebbe essere ancora orizzontale per
+                            // via dello slerp lagging). La velocity rappresenta
+                            // l'orientamento reale del kart subito prima di
+                            // toccare il muro: se stava salendo la rampa slopeata
+                            // a 80 gradi, frozenPitch sara' ~80 gradi (muso in su).
+                            // Resta FISSO per tutto il volo fino all'atterraggio.
+                            Vector3 pf = new Vector3(launchVelocity.x, 0f, launchVelocity.z);
+                            float pm = pf.magnitude;
+                            frozenPitch = (pm > 0.001f)
+                                ? Mathf.Atan2(launchVelocity.y, pm) * Mathf.Rad2Deg
+                                : (launchVelocity.y > 0f ? 90f : 0f);
+                            // Cattura la NORMALE del muro al primo contatto: sara'
+                            // l'"up" del kart per tutto il volo, cosi' le 4 ruote
+                            // restano "attaccate" alla parete verticale. La
+                            // normale punta verso l'esterno del muro (e' il
+                            // reference up come se il kart guidasse sulla parete).
+                            launchWallNormal = n;
+                            // Azzera lo stato di smoothing del visual: cosi' al
+                            // primo frame del lancio la Slerp parte gia' dal
+                            // target (posa frozen) invece di slittare dalla posa
+                            // di guida precedente (terreno slope), che farebbe
+                            // muovere la rotazione X locale durante il transitorio.
+                            hasVisualWorldRotation = false;
                         }
                         continue;
                     }
@@ -420,6 +450,9 @@ namespace ArcadeKart.Core
         private float lastSkateRampContactTime = -999f;
         private Vector3 launchVelocity;
         private Vector3 lastSetVelocity;
+        private float launchYaw;
+        private float frozenPitch;
+        private Vector3 launchWallNormal = Vector3.up;
         private Vector3 lastValidGroundUp = Vector3.up;
         private bool hasValidGroundUp;
         private Vector3 desiredMoveDirection;
@@ -483,22 +516,28 @@ private void UpdateSkateRampLaunchState()
             if (stillTouchingWall)
                 return;
 
-            // Siamo staccati dalla parete: se tocchiamo di nuovo terreno
-            // camminabile, fine del lancio, si riprende a guidare.
+            // Siamo staccati dalla parete: restiamo in lancio per tutta la
+            // fase aerea (volo parabolico). Usciamo SOLO quando riatterriamo
+            // su una superficie camminabile. Questo disabilita sterzo e
+            // air-control per tutto il volo, come richiesto.
             if (IsGrounded && hasGroundContactThisFrame)
             {
                 skateRampLaunch = false;
-                return;
             }
-
-            // Sicurezza: nessun contatto con la parete e non grounded -> usciamo
-            // comunque (la routine non e' piu' attiva).
-            if (!IsGrounded)
-                skateRampLaunch = false;
         }
 
         private void ApplyAirStabilization()
         {
+            // Durante il lancio skate azzeriamo la angular velocity: vogliamo un
+            // volo balistico pulito, senza rotazioni residue del corpo ne'
+            // intervento dell'air-control (i FreezeRotationX/Z sono attivi, ma
+            // azzeriamo anche il yaw per sicurezza e pulizia visiva).
+            if (skateRampLaunch)
+            {
+                rb.angularVelocity = Vector3.zero;
+                return;
+            }
+
             if (IsGrounded)
             {
                 rb.angularVelocity = Vector3.zero;
@@ -916,6 +955,73 @@ private void UpdateSkateRampLaunchState()
             }
 
 
+            // ===== Lancio skate: volo parabolico balistico =====
+            // Il PITCH locale (rotazione X) resta FISSO per tutto il volo
+            // (valore catturato al primo contatto col muro, ereditato dalla
+            // rampa slopeata appena percorsa). Non segue la velocity nemmeno
+            // durante la salita sul muro. Solo lo YAW e' autorizzato a cambiare
+            // in discesa (il muso vira verso la direzione orizzontale della
+            // velocity). L'up resta sempre Vector3.up: niente bank, niente roll.
+            //
+            // Il pitchedForward e' costruito in WORLD SPACE (planarDir*cos +
+            // Vector3.up*sin), cosi' non dipende dalla direzione del right
+            // locale: quando lo yaw si gira di ~180 in discesa (la velocity
+            // planare si inverte) il muso resta inclinato VERSO L'ALTO di
+            // frozenPitch gradi, come uno skate che ridiscende il vert.
+            // ===== Lancio skate: volo parabolico "guidando sul muro" =====
+            // Il kart resta visivamente ATTACCATO alla parete verticale per tutto
+            // il volo, come se stesse guidando sulla superficie del muro:
+            //  - UP = launchWallNormal (la normale del muro catturata al primo
+            //    contatto, punta verso l'esterno della parete). Le "4 ruote"
+            //    restano premute sul muro.
+            //  - FORWARD = direzione del moto PROIETTATA sul piano del muro.
+            //    In questo modo il muso traccia la parabola UM (su per il vert,
+            //    oltre il top, giu in discesa) ruotando gradualmente verso la
+            //    destinazione, ma senza mai staccarsi dalla parete.
+            // Nessun bank/roll: l'up e' fisso (la parete), solo il forward
+            // cambia per seguire la tangente della traiettoria.
+            if (skateRampLaunch)
+            {
+                targetUp = launchWallNormal;
+
+                bool stillTouchingWall =
+                    (Time.time - lastSkateRampContactTime) <= wallContactGraceTime;
+                Vector3 vel = stillTouchingWall ? launchVelocity : rb.linearVelocity;
+
+                // Proietta la velocity sul piano del muro (perpendicolare alla
+                // sua normale): questo e' il "forward" che il kart segue mentre
+                // "guida" sulla superficie della parete, tracciando la parabola.
+                Vector3 forward = Vector3.ProjectOnPlane(vel, targetUp);
+                if (forward.sqrMagnitude < 0.001f)
+                {
+                    // Velocity quasi parallela alla normale del muro (caso raro):
+                    // fallback al forward attuale del visual per evitare LookRotation
+                    // degenere.
+                    forward = driftVisual.forward;
+                    // Proiettiamo anche il fallback sul piano del muro.
+                    forward = Vector3.ProjectOnPlane(forward, targetUp);
+                    if (forward.sqrMagnitude < 0.001f)
+                        forward = Vector3.Cross(targetUp, Vector3.right);
+                }
+                forward.Normalize();
+
+                Quaternion launchTarget = Quaternion.LookRotation(forward, targetUp);
+
+                if (!hasVisualWorldRotation)
+                {
+                    visualWorldRotation = launchTarget;
+                    hasVisualWorldRotation = true;
+                }
+                visualWorldRotation = Quaternion.Slerp(
+                    visualWorldRotation,
+                    launchTarget,
+                    1f - Mathf.Exp(-groundAlignLerpSpeed * Time.deltaTime)
+                );
+                driftVisual.rotation = visualWorldRotation;
+                return;
+            }
+
+            // ===== Comportamento normale (drift / inversioni / allineamento) =====
             // Durante le inversioni il corpo ruota a scatti (fisica voluta):
             // il muso invece punta la direzione di sterzo e ci arriva a velocita'
             // costante (visualYawMaxTurnSpeed), senza scatti ne' trascinamenti.
