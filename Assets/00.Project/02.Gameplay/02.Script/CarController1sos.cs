@@ -185,6 +185,10 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' massima (gradi/sec) con cui il muso del modello ruota verso la direzione di sterzo. Il corpo fisico puo' scattare piu' in fretta (es. inversioni): il modello oscilla a questa velocita' costante invece di seguirlo.")]
         private float visualYawMaxTurnSpeed = 400f;
 
+        [Header("Skate Ramp Launch")]
+        [SerializeField, Tooltip("Velocita' angolare massima (gradi/sec) con cui il visual del kart si riallinea alla traiettoria parabolica durante un lancio skate. Basso = il muso segue lentamente la parabola (piu' fluido, meno 'snappy'); alto = il muso si allinea subito alla velocity. Simile a visualYawMaxTurnSpeed ma applicato al lancio skate.")]
+        private float skateRampVisualTurnSpeed = 180f;
+
         [Header("Impact")]
         [SerializeField, Tooltip("Velocita' minima di urto per invocare OnImpact.")]
         private float impactThreshold = 5f;
@@ -374,12 +378,13 @@ namespace ArcadeKart.Core
                             // normale punta verso l'esterno del muro (e' il
                             // reference up come se il kart guidasse sulla parete).
                             launchWallNormal = n;
-                            // Azzera lo stato di smoothing del visual: cosi' al
-                            // primo frame del lancio la Slerp parte gia' dal
-                            // target (posa frozen) invece di slittare dalla posa
-                            // di guida precedente (terreno slope), che farebbe
-                            // muovere la rotazione X locale durante il transitorio.
-                            hasVisualWorldRotation = false;
+                            // NON azzeriamo hasVisualWorldRotation: la
+                            // RotateTowards nel branch di lancio parte dalla
+                            // posa attuale del visual (allineata al terreno
+                            // slope) e transita gradualmente verso la posa di
+                            // lancio al rate di skateRampVisualTurnSpeed
+                            // gradi/sec. Se lo azzerassimo, il primo frame
+                            // snap-erebbe subito al target = scatto visibile.
                         }
                         continue;
                     }
@@ -1012,10 +1017,16 @@ private void UpdateSkateRampLaunchState()
                     visualWorldRotation = launchTarget;
                     hasVisualWorldRotation = true;
                 }
-                visualWorldRotation = Quaternion.Slerp(
+                // Rate-limit angolare costante (gradi/sec) invece di Slerp:
+                // il muso rincorre la traiettoria parabolica a velocita'
+                // uniforme, come fa visualYawMaxTurnSpeed sullo sterzo. Piu'
+                // fluido e meno "snappy" quando la velocity cambia di colpo
+                // (es. impatto col muro dopo una curva di avvicinamento).
+                float maxDegStep = skateRampVisualTurnSpeed * Time.deltaTime;
+                visualWorldRotation = Quaternion.RotateTowards(
                     visualWorldRotation,
                     launchTarget,
-                    1f - Mathf.Exp(-groundAlignLerpSpeed * Time.deltaTime)
+                    maxDegStep
                 );
                 driftVisual.rotation = visualWorldRotation;
                 return;
