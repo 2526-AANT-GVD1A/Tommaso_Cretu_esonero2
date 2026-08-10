@@ -5098,6 +5098,11 @@ MonoBehaviour:
   yawToRoll: 0.6
   restDampingBoost: 1.5
   rigidBaseCount: 3
+  inputSmoothing: 0.08
+  maxWobbleDisplaySpeed: 60
+  impactMinMagnitude: 7
+  impactCooldown: 0.12
+  snapVelocityDeltaIgnore: 30
 --- !u!1001 &1482687725
 PrefabInstance:
   m_ObjectHideFlags: 0

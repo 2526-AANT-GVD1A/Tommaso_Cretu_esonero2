@@ -94,6 +94,22 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Numero di elementi dal basso della torre che restano rigidi (niente oscillazione gelatina). 0 = tutti oscillano; >0 = i primi N dal fondo sono fissi, utile perche' la base di una pila reale e' stabile mentre solo la cima scalpita.")]
         private int rigidBaseCount = 1;
 
+        [Header("Smoothing (anti-scatti)")]
+        [SerializeField, Tooltip("Costante di tempo (secondi) del low-pass sulle accelerazioni del kart prima di alimentare la molla. 0 = nessun filtro (molta reattivita', tipica per inversioni a U provooca scatti); >0 = accel input smorzata -> la molla parte in modo piu fluido. Default 0.08s.")]
+        private float inputSmoothing = 0.08f;
+
+        [SerializeField, Tooltip("Velocita' massima (gradi/sec) del visualizzato: la torre non puo' MAI inclinarsi piu velocemente di questo, qualunque cosa accada nella molla o nell'input. Uccide gli scatti visivi su sali/scendi/snap. 0 = disattivato (segue la molla grezza). Default 220 deg/sec.")]
+        private float maxWobbleDisplaySpeed = 220f;
+
+        [SerializeField, Tooltip("Soglia minima di magnitudo (m/s) dell'urto (KartController.OnImpact) per applicare l'impulso alla torre. Piu' alto = ignora i piccoli sobbalzi su rampe bumposa. Default 7.")]
+        private float impactMinMagnitude = 7f;
+
+        [SerializeField, Tooltip("Intervallo minimo (secondi) fra due impulsi d'urto consecutivi. Su una rampa bumposa con 5+ picchi/sec questo evita che la torre venga martellata ed impazzisca. Default 0.12s.")]
+        private float impactCooldown = 0.12f;
+
+        [SerializeField, Tooltip("Sopra questa magnitudo di accelerazione istantanea (m/s^2), il delta velocita' viene considerato artefatto (snap di inversione/respawn/lancio skate) e NON alimenta la molla per quel frame. Default 30.")]
+        private float snapVelocityDeltaIgnore = 30f;
+
         public Transform StackRoot => stackRoot;
         public int ItemCount => spawnedItems.Count;
 
@@ -105,6 +121,26 @@ namespace ArcadeKart.Gameplay
         private float prevRightSpeed;
         private float prevKartYaw;
         private float wobbleDesyncTimer;
+
+        // Low-pass sulle accelerazioni lette dal kart (F2 input smoothing):
+        // invece di usare dFwd/dRight/yawVel grezzi alimentiamo la molla con
+        // questi valori smorzati temporalmente, cosi' spike brevi (urto muro,
+        // snap di inversione, sobbalzo) non fanno scattare la torre.
+        private float smoothDFwd;
+        private float smoothDRight;
+        private float smoothYawVel;
+
+        // Display layer per F1 (rate-limit visivo): per ogni oggetto abbiamo
+        // pitch/roll "mostrati" che rincorrono i valori della molla ad un
+        // massimo di maxWobbleDisplaySpeed gradi/sec. Esempio: la molla
+        // vuole saltare di 60 gradi in un frame -> la torre visivamente sale
+        // a 220 deg/sec, quindi arriva in ~0.27s = niente scatto.
+        private readonly List<float> displayedPitch = new List<float>();
+        private readonly List<float> displayedRoll = new List<float>();
+
+        // Cooldown impatti (F3): ultimo tempo in cui abbiamo applicato un
+        // impulso di urto. Ignoriamo altri urti entro impactCooldown secondi.
+        private float lastImpactTime = -999f;
 
         private void Awake()
         {
@@ -138,17 +174,29 @@ namespace ArcadeKart.Gameplay
         // Lo trasformiamo in un impulso angolare distribuito con lever arm:
         // la cima della torre salta di piu' del fondo, come una pila di roba
         // che oscilla quando il carrello prende una botta.
+        //
+        // F3: gating + cooldown. Soglia minima perche' i piccoli sobbalzi di
+        // una rampa bumposa (4-6 m/s) non siano urlati dalla torre; e cooldown
+        // perche' anche sopra soglia, su una rampa a piu' sezioni, arrivano
+        // 5+ impatti/sec e la torre finisce per impazzire martellata.
         private void OnKartImpact(float magnitude)
         {
             if (!wobbleReady || spawnedItems.Count == 0)
                 return;
 
+            if (impactMinMagnitude > 0f && magnitude < impactMinMagnitude)
+                return;
+
+            if (impactCooldown > 0f && (Time.time - lastImpactTime) < impactCooldown)
+                return;
+            lastImpactTime = Time.time;
+
             float strength = Mathf.Max(0f, magnitude);
             for (int i = 0; i < wobble.Count; i++)
             {
                 float lever = 1f + leverPerIndex * i;
-                // pitch verso avanti (come una frenata brusca): urto frontale.
                 ItemWobble w = wobble[i];
+                // pitch verso avanti (come una frenata brusca): urto frontale.
                 w.pitchVel += impactImpulse * lever * strength;
                 // roll random: l'urto raramente e' perfettamente frontale,
                 // aggiungiamo una componente laterale casuale.
@@ -179,8 +227,8 @@ namespace ArcadeKart.Gameplay
             float rightSpeed = localVel.x;
             float dt = Mathf.Max(Time.deltaTime, 0.0001f);
 
-            float dFwd = (fwdSpeed - prevForwardSpeed) / dt;
-            float dRight = (rightSpeed - prevRightSpeed) / dt;
+            float rawDFwd = (fwdSpeed - prevForwardSpeed) / dt;
+            float rawDRight = (rightSpeed - prevRightSpeed) / dt;
             prevForwardSpeed = fwdSpeed;
             prevRightSpeed = rightSpeed;
 
@@ -190,12 +238,45 @@ namespace ArcadeKart.Gameplay
             float curYaw = kartRb.transform.eulerAngles.y;
             float yawDelta = Mathf.DeltaAngle(prevKartYaw, curYaw);
             prevKartYaw = curYaw;
-            float yawVel = yawDelta / dt;
+            float rawYawVel = yawDelta / dt;
 
-            // Per evitare spike assurdi sul primo frame o dopo un respawn
-            // (dove la velocity puo' cambiare di colpo), limitiamo l'accel.
-            dFwd = Mathf.Clamp(dFwd, -60f, 60f);
-            dRight = Mathf.Clamp(dRight, -60f, 60f);
+            // F5: snap gate. Se il delta velocita' istantaneo supera la
+            // soglia, consideriamo il sample artefatto (snap di inversione
+            // / respawn / lancio skate) e NON alimentiamo la molla per
+            // questo frame. Ricalcoliamo i prev per il frame successivo
+            // partendo dallo stato attuale, cosi' non compara un megakick
+            // invertito al frame dopo.
+            bool snapThisFrame =
+                snapVelocityDeltaIgnore > 0f
+                && (Mathf.Abs(rawDFwd) > snapVelocityDeltaIgnore
+                    || Mathf.Abs(rawDRight) > snapVelocityDeltaIgnore);
+            if (snapThisFrame)
+            {
+                rawDFwd = 0f;
+                rawDRight = 0f;
+            }
+
+            // Clamp difensivo anti-spike residui.
+            rawDFwd = Mathf.Clamp(rawDFwd, -60f, 60f);
+            rawDRight = Mathf.Clamp(rawDRight, -60f, 60f);
+
+            // F2: low-pass (EMA) sulle accelerazioni che alimentano la
+            // molla. Costante di tempo inputSmoothing: a = 1 - exp(-dt/tau).
+            // Questo attenua i transitori brevi (urto muro, sobbalzo di
+            // rampa) senza intaccare l'accelerazione sostenuta (lean statico
+            // in frenata/accelerazione continua), che e' lento-confronto.
+            float alpha = 1f;
+            if (inputSmoothing > 0f)
+                alpha = 1f - Mathf.Exp(-dt / inputSmoothing);
+
+            smoothDFwd = Mathf.Lerp(smoothDFwd, rawDFwd, alpha);
+            smoothDRight = Mathf.Lerp(smoothDRight, rawDRight, alpha);
+            smoothYawVel = Mathf.Lerp(smoothYawVel, rawYawVel, alpha);
+
+            // Valori "puliti" che useremo per la molla.
+            float dFwd = smoothDFwd;
+            float dRight = smoothDRight;
+            float yawVel = smoothYawVel;
 
             // ===== Catena cinematica bottom->top =====
             // La torre si piega come un corpo unico, non come oggetti che
@@ -210,6 +291,13 @@ namespace ArcadeKart.Gameplay
             // dritta e ferma a baseLocalOffset, il piegamento comincia
             // sopra l'ultimo item rigido.
             //
+            // F1: i valori applicati NON sono i raw wobble.pitch/roll della
+            // molla, ma i "mostrati" (displayed) che rincorrono i raw ad
+            // un massimo di maxWobbleDisplaySpeed gradi/sec. La catena si
+            // costruisce sui displayed, quindi anche se la molla vuole
+            // saltare di 60 gradi in un frame, la cima raggiungera' la
+            // sua posa a velocita' uniforme -> niente scatto visivo.
+            //
             // Caso statico (wobble tutto 0): accum resta identity e pos ==
             // baseLocalOffset + Vector3.up*verticalSpacing*i, identico a
             // RefreshStackLayout -> nessun pop visivo al passaggio.
@@ -217,6 +305,12 @@ namespace ArcadeKart.Gameplay
             Vector3 pos = baseLocalOffset;
             Quaternion accum = Quaternion.identity;
             int count = spawnedItems.Count;
+
+            // Limite angolare di step del display layer (F1): deg femmax per
+            // questo frame. 0 = rate-limit disattivato (seguia raw molla).
+            float maxDisplayStep = (maxWobbleDisplaySpeed > 0f)
+                ? maxWobbleDisplaySpeed * dt
+                : float.MaxValue;
 
             for (int i = 0; i < count; i++)
             {
@@ -275,8 +369,19 @@ namespace ArcadeKart.Gameplay
                     wobble[i] = w;
                 }
 
+                // F1: display layer. I valori mostrati rincorrono i raw
+                // della molla ad un massimo di maxDisplayStep gradi per
+                // frame. Tra un frame e l'altro possiamo muoverci ad esempio
+                // di 220*0.016 = ~3.5 gradi massimo: la torre non scatta.
+                float dispPitch = displayedPitch[i];
+                float dispRoll = displayedRoll[i];
+                dispPitch = Mathf.MoveTowards(dispPitch, w.pitch, maxDisplayStep);
+                dispRoll = Mathf.MoveTowards(dispRoll, w.roll, maxDisplayStep);
+                displayedPitch[i] = dispPitch;
+                displayedRoll[i] = dispRoll;
+
                 // Rotazione di questo singolo segmento. Identity se rigido.
-                Quaternion seg = Quaternion.Euler(w.pitch, 0f, w.roll);
+                Quaternion seg = Quaternion.Euler(dispPitch, 0f, dispRoll);
 
                 // Ereditiamo l'inclinazione di tutti i segmenti sotto: la
                 // composizione accum*seg produce il tilt cumulativo della
@@ -310,9 +415,17 @@ namespace ArcadeKart.Gameplay
         private void SyncWobbleList()
         {
             while (wobble.Count < spawnedItems.Count)
+            {
                 wobble.Add(default);
+                displayedPitch.Add(0f);
+                displayedRoll.Add(0f);
+            }
             while (wobble.Count > spawnedItems.Count)
+            {
                 wobble.RemoveAt(wobble.Count - 1);
+                displayedPitch.RemoveAt(displayedPitch.Count - 1);
+                displayedRoll.RemoveAt(displayedRoll.Count - 1);
+            }
         }
 
         public void AddCollectedItem(string visualType)
@@ -360,6 +473,8 @@ namespace ArcadeKart.Gameplay
 
             spawnedItems.Add(item);
             wobble.Add(default);
+            displayedPitch.Add(0f);
+            displayedRoll.Add(0f);
             RefreshStackLayout();
         }
 
@@ -373,6 +488,8 @@ namespace ArcadeKart.Gameplay
 
             spawnedItems.Clear();
             wobble.Clear();
+            displayedPitch.Clear();
+            displayedRoll.Clear();
         }
 
         private void RemoveOldestItem()
@@ -384,6 +501,10 @@ namespace ArcadeKart.Gameplay
             spawnedItems.RemoveAt(0);
             if (wobble.Count > 0)
                 wobble.RemoveAt(0);
+            if (displayedPitch.Count > 0)
+                displayedPitch.RemoveAt(0);
+            if (displayedRoll.Count > 0)
+                displayedRoll.RemoveAt(0);
 
             if (oldest != null)
                 Destroy(oldest);
