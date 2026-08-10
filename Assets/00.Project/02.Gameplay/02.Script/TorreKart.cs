@@ -47,8 +47,233 @@ namespace ArcadeKart.Gameplay
 
         private readonly List<GameObject> spawnedItems = new List<GameObject>();
 
+        // Stato di oscillazione (molla smorzata) per ogni elemento della torre,
+        // tenuto allineato a spawnedItems: pitch = inclinazione avanti/indietro
+        // (asse X locale della torre), roll = inclinazione laterale (asse Z).
+        private struct ItemWobble
+        {
+            public float pitch;
+            public float pitchVel;
+            public float roll;
+            public float rollVel;
+        }
+
+        private readonly List<ItemWobble> wobble = new List<ItemWobble>();
+
+        [Header("Reattivita' Carrello")]
+        [SerializeField, Tooltip("Rigidita' della molla: quanta forza richiede per inclinare la torre. Alto = torre rigida, basso = torre molle/flessibile.")]
+        private float wobbleStiffness = 120f;
+
+        [SerializeField, Tooltip("Smorzamento della molla. Piu' alto = l'oscillazione si esaurisce in fretta (niente rimbalzo); piu' basso = 'gelatina' con piu' rimbalzi. Per comportamento sotto-smorzato tenerlo sotto sqrt(4*stiffness).")]
+        private float wobbleDamping = 12f;
+
+        [SerializeField, Tooltip("Inclinazione massima in gradi per ogni elemento della torre.")]
+        private float maxWobbleAngle = 35f;
+
+        [SerializeField, Tooltip("Quanto il braccio della forza cresce con l'altezza. 0 = tutti gli elementi si inclinano uguali; >0 = gli elementi in cima oscillano di piu' (effetto carrello della spesa, torre alta scalpita in cima).")]
+        private float leverPerIndex = 0.35f;
+
+        [SerializeField, Tooltip("Moltiplicatore dell'accelerazione longitudinale sul pitch (avanti/indietro).")]
+        private float longAccelToPitch = 1.6f;
+
+        [SerializeField, Tooltip("Moltiplicatore dell'accelerazione laterale sul roll (sx/dx). Valore negativo inverte il verso di piegamento.")]
+        private float latAccelToRoll = 1.1f;
+
+        [SerializeField, Tooltip("Impulso angolare (deg/sec) applicato alla torre quando il kart prende un urto (KartController.OnImpact). Distribuito con lever arm, quindi la cima salta di piu'.")]
+        private float impactImpulse = 140f;
+
+        [SerializeField, Tooltip("Componente casuale di roll sull'urto (impulso laterale random), per dare varietà ai rimbalzi.")]
+        private float impactLateralRandom = 80f;
+
+        [SerializeField, Tooltip("Viene aggiunto alla velocita' angolare di yaw del kart per alimentare il roll in curva, anche senza grossi delta di velocita' laterale. Aiuta a sentire le sterzate.")]
+        private float yawToRoll = 0.6f;
+
+        [SerializeField, Tooltip("Smorzamento aggiuntivo quando la torre e' ferma, per evitare micro-jitter numerici.")]
+        private float restDampingBoost = 1.5f;
+
         public Transform StackRoot => stackRoot;
         public int ItemCount => spawnedItems.Count;
+
+        // Cache del kart: serve per leggere velocity/accelerazione ed urti.
+        private ArcadeKart.Core.KartController kart;
+        private Rigidbody kartRb;
+        private bool wobbleReady;
+        private float prevForwardSpeed;
+        private float prevRightSpeed;
+        private float prevKartYaw;
+        private float wobbleDesyncTimer;
+
+        private void Awake()
+        {
+            kart = GetComponentInParent<ArcadeKart.Core.KartController>();
+            if (kart != null)
+                kartRb = kart.GetComponent<Rigidbody>();
+
+            wobbleReady = kartRb != null;
+            if (wobbleReady)
+            {
+                Vector3 lv = kartRb.transform.InverseTransformDirection(kartRb.linearVelocity);
+                prevForwardSpeed = lv.z;
+                prevRightSpeed = lv.x;
+                prevKartYaw = kartRb.transform.eulerAngles.y;
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (kart != null)
+                kart.OnImpact.AddListener(OnKartImpact);
+        }
+
+        private void OnDisable()
+        {
+            if (kart != null)
+                kart.OnImpact.RemoveListener(OnKartImpact);
+        }
+
+        // KartController.OnImpact riporta la magnitudo dell'urto (m/s).
+        // Lo trasformiamo in un impulso angolare distribuito con lever arm:
+        // la cima della torre salta di piu' del fondo, come una pila di roba
+        // che oscilla quando il carrello prende una botta.
+        private void OnKartImpact(float magnitude)
+        {
+            if (!wobbleReady || spawnedItems.Count == 0)
+                return;
+
+            float strength = Mathf.Max(0f, magnitude);
+            for (int i = 0; i < wobble.Count; i++)
+            {
+                float lever = 1f + leverPerIndex * i;
+                // pitch verso avanti (come una frenata brusca): urto frontale.
+                ItemWobble w = wobble[i];
+                w.pitchVel += impactImpulse * lever * strength;
+                // roll random: l'urto raramente e' perfettamente frontale,
+                // aggiungiamo una componente laterale casuale.
+                w.rollVel += UnityEngine.Random.Range(-1f, 1f) * impactLateralRandom * lever * strength;
+                wobble[i] = w;
+            }
+        }
+
+        private void Update()
+        {
+            // Sincronizza la lunghezza della lista wobble con spawnedItems:
+            // e' una difensiva contro stati desincronizzati (oggetti distrutti
+            // fuori band, add/remove che ho dimenticato di hookare, ecc.).
+            wobbleDesyncTimer -= Time.deltaTime;
+            if (wobbleDesyncTimer <= 0f)
+            {
+                SyncWobbleList();
+                wobbleDesyncTimer = 1f;
+            }
+
+            if (!wobbleReady || spawnedItems.Count == 0 || kartRb == null)
+                return;
+
+            // Accel/moto del kart lette come delta della velocity locale del
+            // rigidbody: fwdSpeed = forward (Z locale), rightSpeed = laterale (X).
+            Vector3 localVel = kartRb.transform.InverseTransformDirection(kartRb.linearVelocity);
+            float fwdSpeed = localVel.z;
+            float rightSpeed = localVel.x;
+            float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+
+            float dFwd = (fwdSpeed - prevForwardSpeed) / dt;
+            float dRight = (rightSpeed - prevRightSpeed) / dt;
+            prevForwardSpeed = fwdSpeed;
+            prevRightSpeed = rightSpeed;
+
+            // Yaw rate (deg/sec): usato per sentire le sterzate anche quando
+            // il delta di velocita' laterale e' piccolo (curva a velocita'
+            // costante: la torre sente la forza centrifuga).
+            float curYaw = kartRb.transform.eulerAngles.y;
+            float yawDelta = Mathf.DeltaAngle(prevKartYaw, curYaw);
+            prevKartYaw = curYaw;
+            float yawVel = yawDelta / dt;
+
+            // Per evitare spike assurdi sul primo frame o dopo un respawn
+            // (dove la velocity puo' cambiare di colpo), limitiamo l'accel.
+            dFwd = Mathf.Clamp(dFwd, -60f, 60f);
+            dRight = Mathf.Clamp(dRight, -60f, 60f);
+
+            Quaternion baseRot = Quaternion.Euler(localEuler);
+            int count = spawnedItems.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                if (spawnedItems[i] == null)
+                    continue;
+
+                ItemWobble w = wobble[i];
+
+                // Lever arm differenziato: gli elementi in cima hanno braccio
+                // maggiore, quindi oscillano piu' intensamente (carrello
+                // della spesa: la cima scalpita, il fondo quasi fermo).
+                float lever = 1f + leverPerIndex * i;
+
+                // Forza esterna. Segni:
+                //  - accel forward (dFwd > 0) -> torre si piega INDIETRO -> pitch negativo.
+                //  - frenata (dFwd < 0)      -> torre si piega AVANTI   -> pitch positivo.
+                //  - accel a destra (dRight > 0) per inerzia piega a sx -> roll negativo.
+                //  - curva a destra (yawVel > 0) forza centrifuga a sx -> roll negativo.
+                float pitchForce = -dFwd * longAccelToPitch * lever;
+                float rollForce = (-dRight * latAccelToRoll - yawVel * yawToRoll) * lever;
+
+                // Molla smorzata (rispettiamo la struct value-type: leggiamo,
+                // modifichiamo, riscriviamo). Stato oscillante in deg/deg-per-sec.
+                // Smorzamento extra a riposo per uccidere il jitter numerico
+                // quando la torre dovrebbe essere ferma.
+                bool atRest = Mathf.Abs(pitchForce) < 1f && Mathf.Abs(rollForce) < 1f;
+                float dampPitch = wobbleDamping + (atRest ? restDampingBoost : 0f);
+                float dampRoll = wobbleDamping + (atRest ? restDampingBoost : 0f);
+
+                float springPitch = -wobbleStiffness * w.pitch;
+                float springRoll = -wobbleStiffness * w.roll;
+                float dragPitch = -dampPitch * w.pitchVel;
+                float dragRoll = -dampRoll * w.rollVel;
+
+                w.pitchVel += (pitchForce + springPitch + dragPitch) * dt;
+                w.rollVel += (rollForce + springRoll + dragRoll) * dt;
+                w.pitch += w.pitchVel * dt;
+                w.roll += w.rollVel * dt;
+
+                // Clamp angolare: se superiamo maxWobbleAngle, azzeriamo la
+                // velocita' in uscita per evitare che la molla accumuli energia
+                // oltre il limite visivo (effetto "pugno sul tavolo").
+                if (maxWobbleAngle > 0f)
+                {
+                    if (w.pitch > maxWobbleAngle) { w.pitch = maxWobbleAngle; if (w.pitchVel > 0f) w.pitchVel = 0f; }
+                    else if (w.pitch < -maxWobbleAngle) { w.pitch = -maxWobbleAngle; if (w.pitchVel < 0f) w.pitchVel = 0f; }
+                    if (w.roll > maxWobbleAngle) { w.roll = maxWobbleAngle; if (w.rollVel > 0f) w.rollVel = 0f; }
+                    else if (w.roll < -maxWobbleAngle) { w.roll = -maxWobbleAngle; if (w.rollVel < 0f) w.rollVel = 0f; }
+                }
+
+                wobble[i] = w;
+
+                // Applichiamo pitch (asse X locale della torre) e roll (asse Z).
+                // Ci componiamo sopra la rotazione base (localEuler) settata da
+                // RefreshStackLayout: cosi' l'utente puo' ancora orientare gli
+                // elementi via Inspector e il wobble si somma a quell asset.
+                Transform t = spawnedItems[i].transform;
+                t.localRotation = baseRot * Quaternion.Euler(w.pitch, 0f, w.roll);
+            }
+
+            // Evita che l'accelerazione derivata esploda il frame successivo
+            // se l'oggetto e' stato disattivato/riattivato (Time.deltaTime 0).
+            if (Time.timeScale <= 0f)
+            {
+                prevForwardSpeed = fwdSpeed;
+                prevRightSpeed = rightSpeed;
+            }
+        }
+
+        // Mantiene la lista wobble alla stessa lunghezza di spawnedItems,
+        // reintegrando entry mancanti allo zero ed eliminando i ridondanti.
+        private void SyncWobbleList()
+        {
+            while (wobble.Count < spawnedItems.Count)
+                wobble.Add(default);
+            while (wobble.Count > spawnedItems.Count)
+                wobble.RemoveAt(wobble.Count - 1);
+        }
 
         public void AddCollectedItem(string visualType)
         {
@@ -94,6 +319,7 @@ namespace ArcadeKart.Gameplay
             t.localScale = entry.localScale;
 
             spawnedItems.Add(item);
+            wobble.Add(default);
             RefreshStackLayout();
         }
 
@@ -106,6 +332,7 @@ namespace ArcadeKart.Gameplay
             }
 
             spawnedItems.Clear();
+            wobble.Clear();
         }
 
         private void RemoveOldestItem()
@@ -115,6 +342,8 @@ namespace ArcadeKart.Gameplay
 
             GameObject oldest = spawnedItems[0];
             spawnedItems.RemoveAt(0);
+            if (wobble.Count > 0)
+                wobble.RemoveAt(0);
 
             if (oldest != null)
                 Destroy(oldest);
