@@ -5097,6 +5097,10 @@ MonoBehaviour:
   impactLateralRandom: 80
   yawToRoll: 0.6
   restDampingBoost: 1.5
+  windToPitch: 20
+  vibrationAmplitude: 0.6
+  vibrationFrequency: 6
+  vibrationSpeedScale: 14
   rigidBaseCount: 3
   inputSmoothing: 0.08
   maxWobbleDisplaySpeed: 60

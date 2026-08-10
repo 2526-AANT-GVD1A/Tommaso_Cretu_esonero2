@@ -91,6 +91,19 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Smorzamento aggiuntivo quando la torre e' ferma, per evitare micro-jitter numerici.")]
         private float restDampingBoost = 1.5f;
 
+        [Header("Velocita' Costante (vita in corsa)")]
+        [SerializeField, Tooltip("Lean statico all'indietro proporzionale alla velocita' forward (resistenza aria fittizia). A 22 m/s con 0.25 produce ~5.5 gradi * lever di inclinazione in cima. 0 = disattivato. La pila reale su un carrello in corsa non e' perfettamente dritta, si sdraia un po' all'indietro.")]
+        private float windToPitch = 0.25f;
+
+        [SerializeField, Tooltip("Ampiezza in gradi della micro-vibrazione residua a velocita' (simula asperita' del terreno). Viene scalata da vibrationSpeedScale: al raqquarso ��n SPEED_SCALE arriva al 100% di questa ampiezza. 0 = niente vibrazione.")]
+        private float vibrationAmplitude = 0.6f;
+
+        [SerializeField, Tooltip("Frequenza (Hz) della micro-vibrazione. Default ~6 Hz, simile a un kart su asfalto. Too basso = ondeggiamento lento finto; too alto = jitter metallico.")]
+        private float vibrationFrequency = 6f;
+
+        [SerializeField, Tooltip("Velocita' (m/s) forward a cui la vibrazione raggiunge il 100% della ampiezza. Sotto questa soglia la vibrazione scala linearmente verso 0, per via del kart fermo che non scalpita.")]
+        private float vibrationSpeedScale = 14f;
+
         [SerializeField, Tooltip("Numero di elementi dal basso della torre che restano rigidi (niente oscillazione gelatina). 0 = tutti oscillano; >0 = i primi N dal fondo sono fissi, utile perche' la base di una pila reale e' stabile mentre solo la cima scalpita.")]
         private int rigidBaseCount = 1;
 
@@ -345,6 +358,31 @@ namespace ArcadeKart.Gameplay
                     //  - curva a destra (yawVel > 0) forza centrifuga a sx -> roll neg.
                     float pitchForce = -dFwd * longAccelToPitch * lever;
                     float rollForce = (-dRight * latAccelToRoll - yawVel * yawToRoll) * lever;
+
+                    // E1 - Wind lean: a velocita' costante la torre resta
+                    // inclinata all'indietro proporzionalmente alla velocita'
+                    // forward, come se l'aria premesse sulla cima. Senza
+                    // questo termine la torre in autostrada dritta sarebbe
+                    // perfettamente verticale (irrealistico per una pila di
+                    // roba su un carrello in corsa).
+                    pitchForce -= fwdSpeed * windToPitch * lever;
+
+                    // E2 - Micro-vibrazione: anche a velocita' costante la
+                    // torre "vive" un po', scalza dall'irregolarita' del
+                    // terreno. Due sinusoidi sfasate su pitch e roll per non
+                    // sembrare un metronomo. Ampiezza scalata da velocity.
+                    float vibSpeedRatio = (vibrationSpeedScale > 0f)
+                        ? Mathf.Clamp01(Mathf.Abs(fwdSpeed) / vibrationSpeedScale)
+                        : (Mathf.Abs(fwdSpeed) > 0f ? 1f : 0f);
+                    float vibAmpDeg = vibrationAmplitude * vibSpeedRatio * lever;
+
+                    if (vibAmpDeg > 0f)
+                    {
+                        float phase = Time.time * vibrationFrequency * Mathf.PI * 2f;
+                        pitchForce += Mathf.Sin(phase) * vibAmpDeg;
+                        // 1.7Hz.roll: stessa freq ma fase spostata, simula strada disomogenea.
+                        rollForce += Mathf.Sin(phase * 1.7f + 1.3f) * vibAmpDeg * 0.7f;
+                    }
 
                     // Molla smorzata. Smorzamento extra a riposo per
                     // uccidere il jitter numerico quanto piu' ferma possibile.
