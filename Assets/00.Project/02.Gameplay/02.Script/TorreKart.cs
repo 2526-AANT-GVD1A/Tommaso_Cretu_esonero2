@@ -126,6 +126,12 @@ namespace ArcadeKart.Gameplay
         public Transform StackRoot => stackRoot;
         public int ItemCount => spawnedItems.Count;
 
+        // Contatore totale degli oggetti raccolti dall'inizio della partita.
+        // Diverso da ItemCount: non cala quando la torre fa overflow (RemoveOldestItem)
+        // ne' quando si svuota con ClearAll. E' un punteggio di accumulo puro.
+        private int totalCollected;
+        public int TotalCollected => totalCollected;
+
         // Cache del kart: serve per leggere velocity/accelerazione ed urti.
         private ArcadeKart.Core.KartController kart;
         private Rigidbody kartRb;
@@ -169,6 +175,22 @@ namespace ArcadeKart.Gameplay
                 prevRightSpeed = lv.x;
                 prevKartYaw = kartRb.transform.eulerAngles.y;
             }
+
+            // Reset del contatore totale all'avvio: cosi' una ricarica di
+            // scena (riavvio partita) riporta il punteggio a zero in modo
+            // pulito, senza dipendere da logiche esterne. Per un reset
+            // manuale a meta' partita (es. trigger di checkpoint) usare
+            // ResetTotal().
+            totalCollected = 0;
+        }
+
+        // Azzera il contatore totale raccolti. Pensato per essere chiamato
+        // da trigger/zone di reset futuri (es. checkpoint, nuovo livello,
+        // game over -> restart). non tocca la torre visibile: per quello
+        // usare ClearAll().
+        public void ResetTotal()
+        {
+            totalCollected = 0;
         }
 
         private void OnEnable()
@@ -514,6 +536,14 @@ namespace ArcadeKart.Gameplay
             displayedPitch.Add(0f);
             displayedRoll.Add(0f);
             RefreshStackLayout();
+
+            // Punteggio totale: incrementa ad ogni raccolta effettuata.
+            // Non viene decrementato quando RemoveOldestItem scarta un
+            // elemento per overflow del stack visibile ne' da ClearAll:
+            // rappresenta "quanti ne ho raccolti dall'ultimo reset", non
+            // "quanti ne ho addosso ora" (quello e' ItemCount).
+            totalCollected++;
+            Debug.Log("[KartCollectedStack] Totale raccolti: " + totalCollected, this);
         }
 
         public void ClearAll()
