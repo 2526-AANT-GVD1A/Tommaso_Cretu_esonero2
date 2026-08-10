@@ -37,6 +37,10 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Numero massimo di oggetti visibili nella torre.")]
         private int maxItems = 5;
 
+        [Header("Sicurezza Fisica")]
+        [SerializeField, Tooltip("Layer su cui forzare i cloni della torre. Deve essere un layer inerte che NON collide col kart (Vehicle/ground) ne' coi suoi SphereCast/Raycast di ground check, cosi' una torre alta non puo' bloccare il kart in tunnel/passaggi stretti. Default: Oggeto (9).")]
+        private int stackLayer = 9;
+
         [Header("Type Mapping")]
         [SerializeField, Tooltip("Associazione tipo -> prefab visivo.")]
         private List<VisualEntry> visuals = new List<VisualEntry>();
@@ -61,9 +65,19 @@ namespace ArcadeKart.Gameplay
             }
 
             VisualEntry entry = FindEntry(visualType);
-            if (entry == null || entry.visualPrefab == null)
+            if (entry == null)
             {
-                Debug.LogWarning("[KartCollectedStack] Nessun prefab configurato per il tipo: " + visualType, this);
+                Debug.LogWarning("[KartCollectedStack] Nessuna VisualEntry per il tipo: " + visualType, this);
+                return;
+            }
+
+            // visualPrefab puo' essere "null" anche se la entry esiste: capita
+            // quando il campo punta a un'istanza di scena anziche' a un prefab
+            // asset di progetto e quella istanza viene distrutta a runtime
+            // (es. e' essa stessa un Pickup raccolto e Destroy-ato).
+            if (entry.visualPrefab == null)
+            {
+                Debug.LogWarning("[KartCollectedStack] Prefab visivo mancante o distrutto per il tipo: " + visualType + ". Assegna nel visualPrefab un prefab ASSET di progetto, non un'istanza di scena.", this);
                 return;
             }
 
@@ -72,6 +86,8 @@ namespace ArcadeKart.Gameplay
 
             GameObject item = Instantiate(entry.visualPrefab, stackRoot);
             item.name = "Stack_" + visualType + "_" + Time.frameCount;
+
+            SanitizeVisualClone(item);
 
             Transform t = item.transform;
             t.localRotation = Quaternion.Euler(localEuler);
@@ -126,6 +142,48 @@ namespace ArcadeKart.Gameplay
             }
 
             return null;
+        }
+
+        // I cloni della torre esistono solo per scopi visivi: non devono
+        // partecipare alla fisica ne' riusare la logica di Pickup del
+        // prefab sorgente (che e' pensata per l'oggetto "vivo" in scena).
+        // Ripuliamo quindi ogni clone a runtime cosi' e' sicuro per
+        // costruzione, indipendentemente da come e' configurato il prefab
+        // assegnato nel campo visualPrefab (trigger, non-trigger, con
+        // Rigidbody, con Pickup, su layer sbagliato...). Cosi' una torre
+        // alta non puo' mai bloccare il kart in tunnel/passaggi stretti.
+        private void SanitizeVisualClone(GameObject item)
+        {
+            // Layer inerte: non collide col kart ne' coi suoi ground check.
+            foreach (Transform tr in item.GetComponentsInChildren<Transform>(true))
+                tr.gameObject.layer = stackLayer;
+
+            // Disattiviamo ogni collider: il clone non genera ne' contatti
+            // fisici ne' eventi trigger. Include eventuali collider
+            // disabilitati di default nel prefab (true li prende comunque).
+            Collider[] colliders = item.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < colliders.Length; i++)
+                colliders[i].enabled = false;
+
+            // Rimuoviamo eventuali Rigidbody: senza corpo fisico il clone
+            // e' grafica pura, non puo' oscillare/spingere/cadere.
+            Rigidbody[] rbs = item.GetComponentsInChildren<Rigidbody>(true);
+            for (int i = 0; i < rbs.Length; i++)
+            {
+                if (rbs[i] != null)
+                    Destroy(rbs[i]);
+            }
+
+            // Rimuoviamo il componente Pickup: e' la logica di raccolta
+            // dell'oggetto "vivo" e non deve girare sui cloni della torre
+            // (altrimenti ogni elemento impilato tenterebbe di raccogliere
+            // ancora il player e sprecerebbe callback ad ogni passaggio).
+            Pickup[] pickups = item.GetComponentsInChildren<Pickup>(true);
+            for (int i = 0; i < pickups.Length; i++)
+            {
+                if (pickups[i] != null)
+                    Destroy(pickups[i]);
+            }
         }
     }
 }
