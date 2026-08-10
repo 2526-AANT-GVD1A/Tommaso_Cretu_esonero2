@@ -197,86 +197,103 @@ namespace ArcadeKart.Gameplay
             dFwd = Mathf.Clamp(dFwd, -60f, 60f);
             dRight = Mathf.Clamp(dRight, -60f, 60f);
 
+            // ===== Catena cinematica bottom->top =====
+            // La torre si piega come un corpo unico, non come oggetti che
+            // ruotano sul posto. Ogni segmento eredita l'inclinazione di
+            // tutti quelli sotto di lui: accum accumula la rotazione dal
+            // fondo verso la cima, e pos accumula lo spostamento del
+            // "giunto" superiore di ogni segmento ruotato. Cio' fa si' che
+            // la cima della torre si sposti davvero quando la pila si piega
+            // (effetto canna flessibile / carrello della spesa reale).
+            //
+            // La base rigida (i < rigidBaseCount) ha seg = identity: resta
+            // dritta e ferma a baseLocalOffset, il piegamento comincia
+            // sopra l'ultimo item rigido.
+            //
+            // Caso statico (wobble tutto 0): accum resta identity e pos ==
+            // baseLocalOffset + Vector3.up*verticalSpacing*i, identico a
+            // RefreshStackLayout -> nessun pop visivo al passaggio.
             Quaternion baseRot = Quaternion.Euler(localEuler);
+            Vector3 pos = baseLocalOffset;
+            Quaternion accum = Quaternion.identity;
             int count = spawnedItems.Count;
 
             for (int i = 0; i < count; i++)
             {
                 if (spawnedItems[i] == null)
-                    continue;
-
-                // I primi rigidBaseCount elementi dal basso sono rigidi: niente
-                // wobble gelatina. La base di una pila reale e' stabile, solo
-                // la cima scalpita. Teniamo pitch/roll a zero e azzeriamo la
-                // velocita' angolare per pulire eventuali residui da impulsi
-                // precedenti (es. urti ricevuti prima che l'item scendesse
-                // sotto la soglia rigidBaseCount).
-                if (rigidBaseCount > 0 && i < rigidBaseCount)
                 {
-                    ItemWobble wr = wobble[i];
-                    wr.pitch = 0f;
-                    wr.roll = 0f;
-                    wr.pitchVel = 0f;
-                    wr.rollVel = 0f;
-                    wobble[i] = wr;
-
-                    Transform tr0 = spawnedItems[i].transform;
-                    tr0.localRotation = baseRot;
+                    // Saltiamo l'oggetto nullo: la catena NON accumula per
+                    // lui (preserva costeggiatura dei pezzi ancora vivi).
                     continue;
                 }
 
                 ItemWobble w = wobble[i];
 
-                // Lever arm differenziato: gli elementi in cima hanno braccio
-                // maggiore, quindi oscillano piu' intensamente (carrello
-                // della spesa: la cima scalpita, il fondo quasi fermo).
-                float lever = 1f + leverPerIndex * i;
-
-                // Forza esterna. Segni:
-                //  - accel forward (dFwd > 0) -> torre si piega INDIETRO -> pitch negativo.
-                //  - frenata (dFwd < 0)      -> torre si piega AVANTI   -> pitch positivo.
-                //  - accel a destra (dRight > 0) per inerzia piega a sx -> roll negativo.
-                //  - curva a destra (yawVel > 0) forza centrifuga a sx -> roll negativo.
-                float pitchForce = -dFwd * longAccelToPitch * lever;
-                float rollForce = (-dRight * latAccelToRoll - yawVel * yawToRoll) * lever;
-
-                // Molla smorzata (rispettiamo la struct value-type: leggiamo,
-                // modifichiamo, riscriviamo). Stato oscillante in deg/deg-per-sec.
-                // Smorzamento extra a riposo per uccidere il jitter numerico
-                // quando la torre dovrebbe essere ferma.
-                bool atRest = Mathf.Abs(pitchForce) < 1f && Mathf.Abs(rollForce) < 1f;
-                float dampPitch = wobbleDamping + (atRest ? restDampingBoost : 0f);
-                float dampRoll = wobbleDamping + (atRest ? restDampingBoost : 0f);
-
-                float springPitch = -wobbleStiffness * w.pitch;
-                float springRoll = -wobbleStiffness * w.roll;
-                float dragPitch = -dampPitch * w.pitchVel;
-                float dragRoll = -dampRoll * w.rollVel;
-
-                w.pitchVel += (pitchForce + springPitch + dragPitch) * dt;
-                w.rollVel += (rollForce + springRoll + dragRoll) * dt;
-                w.pitch += w.pitchVel * dt;
-                w.roll += w.rollVel * dt;
-
-                // Clamp angolare: se superiamo maxWobbleAngle, azzeriamo la
-                // velocita' in uscita per evitare che la molla accumuli energia
-                // oltre il limite visivo (effetto "pugno sul tavolo").
-                if (maxWobbleAngle > 0f)
+                // Base rigida: azzera wobble e velocita' (pulizia residui).
+                if (rigidBaseCount > 0 && i < rigidBaseCount)
                 {
-                    if (w.pitch > maxWobbleAngle) { w.pitch = maxWobbleAngle; if (w.pitchVel > 0f) w.pitchVel = 0f; }
-                    else if (w.pitch < -maxWobbleAngle) { w.pitch = -maxWobbleAngle; if (w.pitchVel < 0f) w.pitchVel = 0f; }
-                    if (w.roll > maxWobbleAngle) { w.roll = maxWobbleAngle; if (w.rollVel > 0f) w.rollVel = 0f; }
-                    else if (w.roll < -maxWobbleAngle) { w.roll = -maxWobbleAngle; if (w.rollVel < 0f) w.rollVel = 0f; }
+                    w.pitch = 0f;
+                    w.roll = 0f;
+                    w.pitchVel = 0f;
+                    w.rollVel = 0f;
+                    wobble[i] = w;
+                }
+                else
+                {
+                    // Lever arm differenziato: gli elementi in cima hanno
+                    // braccio maggiore, oscillano piu' intensamente.
+                    float lever = 1f + leverPerIndex * i;
+
+                    // Segni:
+                    //  - accel forward (dFwd > 0) -> piega INDIETRO -> pitch neg.
+                    //  - frenata (dFwd < 0)      -> piega AVANTI   -> pitch pos.
+                    //  - accel a destra (dRight > 0) per inerzia piega a sx -> roll neg.
+                    //  - curva a destra (yawVel > 0) forza centrifuga a sx -> roll neg.
+                    float pitchForce = -dFwd * longAccelToPitch * lever;
+                    float rollForce = (-dRight * latAccelToRoll - yawVel * yawToRoll) * lever;
+
+                    // Molla smorzata. Smorzamento extra a riposo per
+                    // uccidere il jitter numerico quanto piu' ferma possibile.
+                    bool atRest = Mathf.Abs(pitchForce) < 1f && Mathf.Abs(rollForce) < 1f;
+                    float damp = wobbleDamping + (atRest ? restDampingBoost : 0f);
+
+                    w.pitchVel += (pitchForce - wobbleStiffness * w.pitch - damp * w.pitchVel) * dt;
+                    w.rollVel += (rollForce - wobbleStiffness * w.roll - damp * w.rollVel) * dt;
+                    w.pitch += w.pitchVel * dt;
+                    w.roll += w.rollVel * dt;
+
+                    // Clamp angolare con annullamento velocita' in uscita:
+                    // evita accumulo di energia oltre il limite visivo.
+                    if (maxWobbleAngle > 0f)
+                    {
+                        if (w.pitch > maxWobbleAngle) { w.pitch = maxWobbleAngle; if (w.pitchVel > 0f) w.pitchVel = 0f; }
+                        else if (w.pitch < -maxWobbleAngle) { w.pitch = -maxWobbleAngle; if (w.pitchVel < 0f) w.pitchVel = 0f; }
+                        if (w.roll > maxWobbleAngle) { w.roll = maxWobbleAngle; if (w.rollVel > 0f) w.rollVel = 0f; }
+                        else if (w.roll < -maxWobbleAngle) { w.roll = -maxWobbleAngle; if (w.rollVel < 0f) w.rollVel = 0f; }
+                    }
+
+                    wobble[i] = w;
                 }
 
-                wobble[i] = w;
+                // Rotazione di questo singolo segmento. Identity se rigido.
+                Quaternion seg = Quaternion.Euler(w.pitch, 0f, w.roll);
 
-                // Applichiamo pitch (asse X locale della torre) e roll (asse Z).
-                // Ci componiamo sopra la rotazione base (localEuler) settata da
-                // RefreshStackLayout: cosi' l'utente puo' ancora orientare gli
-                // elementi via Inspector e il wobble si somma a quell asset.
+                // Ereditiamo l'inclinazione di tutti i segmenti sotto: la
+                // composizione accum*seg produce il tilt cumulativo della
+                // cima rispetto alla base. Cio' che distingue una pila che
+                // ruota sul posto da una che si piega come corpo e' questo
+                // accumulo + lo spostamento posizionale del giunto sotto.
+                accum = accum * seg;
+
                 Transform t = spawnedItems[i].transform;
-                t.localRotation = baseRot * Quaternion.Euler(w.pitch, 0f, w.roll);
+                t.localRotation = baseRot * accum;
+                t.localPosition = pos;
+
+                // Prossimo giunto: saliamo lungo la direzione "su" della
+                // catena piegata. Usiamo accum (senza baseRot) perche' lo
+                // spacing verticale appartiene allo spazio della torre, non
+                // alla rotazione voluta dall'utente nel singolo pezzo.
+                pos += accum * (Vector3.up * verticalSpacing);
             }
 
             // Evita che l'accelerazione derivata esploda il frame successivo

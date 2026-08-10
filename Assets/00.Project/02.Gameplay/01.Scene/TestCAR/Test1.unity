@@ -5089,7 +5089,7 @@ MonoBehaviour:
     localScale: {x: 1, y: 1, z: 1}
   wobbleStiffness: 200
   wobbleDamping: 2
-  maxWobbleAngle: 35
+  maxWobbleAngle: 10
   leverPerIndex: 0.35
   longAccelToPitch: 1.6
   latAccelToRoll: 1.1
