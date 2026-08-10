@@ -5097,6 +5097,7 @@ MonoBehaviour:
   impactLateralRandom: 80
   yawToRoll: 0.6
   restDampingBoost: 1.5
+  rigidBaseCount: 3
 --- !u!1001 &1482687725
 PrefabInstance:
   m_ObjectHideFlags: 0

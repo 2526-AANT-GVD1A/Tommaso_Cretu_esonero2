@@ -91,6 +91,9 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Smorzamento aggiuntivo quando la torre e' ferma, per evitare micro-jitter numerici.")]
         private float restDampingBoost = 1.5f;
 
+        [SerializeField, Tooltip("Numero di elementi dal basso della torre che restano rigidi (niente oscillazione gelatina). 0 = tutti oscillano; >0 = i primi N dal fondo sono fissi, utile perche' la base di una pila reale e' stabile mentre solo la cima scalpita.")]
+        private int rigidBaseCount = 1;
+
         public Transform StackRoot => stackRoot;
         public int ItemCount => spawnedItems.Count;
 
@@ -201,6 +204,26 @@ namespace ArcadeKart.Gameplay
             {
                 if (spawnedItems[i] == null)
                     continue;
+
+                // I primi rigidBaseCount elementi dal basso sono rigidi: niente
+                // wobble gelatina. La base di una pila reale e' stabile, solo
+                // la cima scalpita. Teniamo pitch/roll a zero e azzeriamo la
+                // velocita' angolare per pulire eventuali residui da impulsi
+                // precedenti (es. urti ricevuti prima che l'item scendesse
+                // sotto la soglia rigidBaseCount).
+                if (rigidBaseCount > 0 && i < rigidBaseCount)
+                {
+                    ItemWobble wr = wobble[i];
+                    wr.pitch = 0f;
+                    wr.roll = 0f;
+                    wr.pitchVel = 0f;
+                    wr.rollVel = 0f;
+                    wobble[i] = wr;
+
+                    Transform tr0 = spawnedItems[i].transform;
+                    tr0.localRotation = baseRot;
+                    continue;
+                }
 
                 ItemWobble w = wobble[i];
 
