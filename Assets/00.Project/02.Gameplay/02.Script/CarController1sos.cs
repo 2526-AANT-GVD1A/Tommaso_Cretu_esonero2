@@ -110,50 +110,44 @@ namespace ArcadeKart.Core
         private float driftVisualLerpSpeed = 8f;
 
         [Header("Active Drift")]
-        [SerializeField, Tooltip("Velocita' minima del kart per attivare il drift attivo (Shift + sterzo).")]
+        [SerializeField, Tooltip("Velocita' planare minima del kart per attivare e mantenere il drift attivo (Shift + sterzo). Sotto questo valore (es. dopo un impatto col muro) il drift si interrompe, senza boost.")]
         private float activeDriftMinSpeed = 5f;
 
         [SerializeField, Tooltip("Input di sterzo laterale (Move.x) minimo per entrare nel drift attivo.")]
         [Range(0f, 1f)]
         private float activeDriftMinSteer = 0.35f;
 
-        [SerializeField, Tooltip("Angolo target di derapata (gradi) rispetto alla direzione di marcia catturata all'ingresso.")]
-        private float activeDriftAngle = 30f;
-
-        [SerializeField, Tooltip("Velocita' angular (gradi/sec) con cui il muso rincorre l'angolo di derapata.")]
-        private float activeDriftAngleRealignSpeed = 220f;
-
-        [SerializeField, Tooltip("[Legacy] Non piu' usato: dal refactor la direzione del muso segue direttamente il joystick e Move.x influenza il target tramite baseDir. Lasciato per non invalidare i valori serializzati nelle scene.")]
-        [Range(0f, 1f)]
-        private float activeDriftSteerAuthority = 0.6f;
-
-        [SerializeField, Tooltip("Grip laterale durante il drift attivo (separato dal drift passivo).")]
+        [SerializeField, Tooltip("Grip laterale durante il drift attivo (separato dal drift passivo). Basso = la velocity slitta rispetto al muso (derapata).")]
         private float activeDriftLateralFriction = 3f;
 
-        [SerializeField, Tooltip("Frazione della speed all'ingresso tenuta come velocita' longitudinale target durante la derapata. 1 = conserva, <1 = decelera leggermente.")]
+        [SerializeField, Tooltip("Frazione della speed all'ingresso tenuta come velocita' longitudinale target durante la derapata. 1 = conserva, <1 = decelera leggermente. Clamp in ogni caso al floor (activeDriftMinForwardSpeed).")]
         [Range(0f, 1f)]
         private float activeDriftForwardRetention = 0.95f;
 
-        [SerializeField, Tooltip("Velocita' di accumulo della carica (unita'/sec). Aumenta driftCharge nel tempo.")]
+        [SerializeField, Tooltip("HARD FLOOR (unita'/sec) della velocita' longitudinale locale durante il drift attivo. Il kart non scende mai sotto questo valore finche' resta in drift: niente perdita di boost per derapate strette / 360. Pero' un impatto col muro puo' comunque abbassare la planarSpeed sotto activeDriftMinSpeed e far uscire il drift (vedi activeDriftMinSpeed).")]
+        private float activeDriftMinForwardSpeed = 8f;
+
+        [SerializeField, Tooltip("Cap hard (gradi/sec) di quanto il muso puo' ruotare verso il joystick durante il drift attivo. Previene spin istantanei: niente 360 in 0.1 sec anche se il joystick fa cerchi completi. Indipendente dalla sterzata normale (turnRate).")]
+        private float activeDriftMaxTurnRate = 150f;
+
+        [SerializeField, Tooltip("Angolo minimo (gradi) fra muso del kart e direzione del joystick per accumulare carica boost. Sotto questa soglia (es. vai dritto) NON carichi. La carica accumulata resta pero' sticky (non decade): serve a impedire 'charge for free' andando dritto.")]
+        private float activeDriftChargeMinAngle = 15f;
+
+        [SerializeField, Tooltip("Tempo (sec) di sterzata sopra soglia richiesto per caricare completamente il boost (singola fase). Una volta raggiunto, isDriftCharged diventa true e resta sticky fino al rilascio del Shift o perdita speed.")]
+        private float activeDriftChargeTime = 1.0f;
+
+        [SerializeField, Tooltip("Velocita' di accumulo della carica (unita'/sec). Con driftChargeRate=1 e activeDriftChargeTime=1, ci vuole 1 secondo di sterzata sopra soglia per caricare.")]
         private float driftChargeRate = 1f;
 
-        [SerializeField, Tooltip("Tempo minimo di carica per ottenere un boost al rilascio del drift attivo. Sotto questa soglia il rilascio non da' boost.")]
-        private float driftMinChargeForBoost = 0.3f;
+        [SerializeField, Tooltip("Magnitude (moltiplicatore speed) del boost in uscita al rilascio dello Shift con carica completata. Singola fase: valore fisso.")]
+        private float activeDriftBoostMagnitude = 1.5f;
 
-        [SerializeField, Tooltip("Durata massima di carica: oltre questa soglia il boost resta al massimo.")]
-        private float activeDriftBoostMaxCharge = 1.5f;
+        [SerializeField, Tooltip("Durata (sec) del boost in uscita al rilascio dello Shift con carica completata. Singola fase: valore fisso.")]
+        private float activeDriftBoostDuration = 0.8f;
 
-        [SerializeField, Tooltip("Magnitude minima del boost in uscita (moltiplicatore speed).")]
-        private float activeDriftBoostMagnitudeMin = 1.25f;
-
-        [SerializeField, Tooltip("Magnitude massima del boost in uscita (moltiplicatore speed).")]
-        private float activeDriftBoostMagnitudeMax = 1.7f;
-
-        [SerializeField, Tooltip("Durata minima (sec) del boost in uscita.")]
-        private float activeDriftBoostDurationMin = 0.4f;
-
-        [SerializeField, Tooltip("Durata massima (sec) del boost in uscita.")]
-        private float activeDriftBoostDurationMax = 1.0f;
+        [SerializeField, Tooltip("Inclinazione visiva (yaw del mesh) durante il drift attivo, come frazione del drift passivo. 0 = nessuna inclinazione, 0.4 = lieve (40% del passivo), 1 = identica al passivo. Il muso segue il joystick, il kart resta sostanzialmente dritto.")]
+        [Range(0f, 1f)]
+        private float activeDriftVisualYawScale = 0.4f;
 
         [Header("Ground & Gravity")]
         [SerializeField, Tooltip("Gravita' custom applicata al kart.")]
@@ -266,6 +260,8 @@ namespace ArcadeKart.Core
 
         public float DriftCharge => driftCharge;
 
+        public bool IsDriftCharged => isDriftCharged;
+
         public void ApplyBoost(float magnitude, float duration) =>
             StartMultiplier(Mathf.Max(1f, magnitude), duration);
 
@@ -285,9 +281,8 @@ namespace ArcadeKart.Core
 
             isDriftingActive = false;
             driftCharge = 0f;
-            driftSign = 0f;
             driftEntrySpeed = 0f;
-            driftEntryVelocityDir = Vector3.zero;
+            isDriftCharged = false;
         }
 
         public void RespawnAt(Transform t)
@@ -498,10 +493,9 @@ namespace ArcadeKart.Core
         private float currentDriftYaw;
 
         private bool isDriftingActive;
-        private float driftSign;
         private float driftCharge;
         private float driftEntrySpeed;
-        private Vector3 driftEntryVelocityDir;
+        private bool isDriftCharged;
         private float visualYawDegrees;
         private float visualYawVelocity;
         private bool hasVisualYawDegrees;
@@ -702,24 +696,46 @@ private void UpdateSkateRampLaunchState()
 
                 if (lostGround || releasedDrift)
                 {
-                    bool wasCharged = driftCharge >= driftMinChargeForBoost;
-                    if (releasedDrift && wasCharged)
+                    // Uscita INTELLIGENTE:
+                    //  - Rilascio Shift con carica completata -> ApplyBoost
+                    //    (singola fase, magnitude/duration fissi).
+                    //  - Crash (planarSpeed < activeDriftMinSpeed) o salto ->
+                    //    reset senza boost. isDriftCharged decide se boostare,
+                    //    NON driftCharge direttamente, cosi' il boost si ha
+                    //    solo se hai sterzato abbastanza a lungo.
+                    if (releasedDrift && isDriftCharged)
                     {
-                        float t = Mathf.InverseLerp(driftMinChargeForBoost, activeDriftBoostMaxCharge, driftCharge);
-                        float mag = Mathf.Lerp(activeDriftBoostMagnitudeMin, activeDriftBoostMagnitudeMax, t);
-                        float dur = Mathf.Lerp(activeDriftBoostDurationMin, activeDriftBoostDurationMax, t);
-                        ApplyBoost(mag, dur);
+                        ApplyBoost(activeDriftBoostMagnitude, activeDriftBoostDuration);
                     }
 
                     isDriftingActive = false;
                     driftCharge = 0f;
-                    driftSign = 0f;
                     driftEntrySpeed = 0f;
-                    driftEntryVelocityDir = Vector3.zero;
+                    isDriftCharged = false;
                     return;
                 }
 
-                driftCharge = Mathf.Min(driftCharge + driftChargeRate * Time.fixedDeltaTime, activeDriftBoostMaxCharge);
+                // Carica boost: accumula driftCharge SOLO se stai sterzando
+                // abbastanza (|angolo muso-vs-joystick| >= soglia). Sticky:
+                // se smetti di sterzare o cambi direzione, la carica accumulata
+                // NON decade. Cosi' puoi caricare, poi andare dritto/cambiare
+                // direzione senza perdere il boost, e rilasciarlo quando vuoi.
+                // Clamp a activeDriftChargeTime: singola fase, non serve oltre.
+                float angleToJoystick = Mathf.Abs(currentSignedAngleToDesired);
+                if (angleToJoystick >= activeDriftChargeMinAngle)
+                {
+                    driftCharge = Mathf.Min(
+                        driftCharge + driftChargeRate * Time.fixedDeltaTime,
+                        activeDriftChargeTime
+                    );
+                }
+
+                // Sticky charged: una volta raggiunta la soglia resta true
+                // fino al reset (rilascio Shift / crash). Niente decay.
+                if (!isDriftCharged && driftCharge >= activeDriftChargeTime)
+                {
+                    isDriftCharged = true;
+                }
             }
             else
             {
@@ -731,16 +747,10 @@ private void UpdateSkateRampLaunchState()
 
                 if (canEnter)
                 {
-                    float steerSign = Mathf.Sign(input.Move.x);
-                    if (steerSign == 0f) steerSign = 1f;
-
                     isDriftingActive = true;
-                    driftSign = steerSign;
                     driftEntrySpeed = planarSpeed;
-                    driftEntryVelocityDir = planarVel.sqrMagnitude > 0.0001f
-                        ? planarVel.normalized
-                        : Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f)).normalized;
                     driftCharge = 0f;
+                    isDriftCharged = false;
                 }
             }
         }
@@ -756,56 +766,41 @@ private void UpdateSkateRampLaunchState()
             if (skateRampLaunch)
                 return;
 
-            // ===== DRIFT ATTIVO: override completo della sterzata =====
-            // Il target del muso segue il joystick (camera-relative), shiftato
-            // di un offset di sovrasterzo (activeDriftAngle * driftSign). Il
-            // muso rincorre questo target a velocita' angular costante
-            // (activeDriftAngleRealignSpeed). L'angolo fra muso e velocity
-            // resta aperto (derapata) finche' lateralFriction non lo richiude.
-            // driftSign resta bloccato all'ingresso (destra/sinistra) come in
-            // Mario Kart. Mathf.DeltaAngle gestisce il wrap-around a 180°
-            // senza flip, cosi' il kart puo' curvare anche oltre 180° / 360°.
+            // ===== DRIFT ATTIVO: sterzata graduale che segue il joystick =====
+            // Il muso rincorre desiredMoveDirection (joystick, camera-relative)
+            // come farebbe la sterzata normale, ma con un cap hard dedicato
+            // (activeDriftMaxTurnRate gradi/sec) che previene spin istantanei.
+            // Niente offset oversteer, niente target "oltre la curva": la
+            // derapata nasce solo dalla fisica (grip laterale abbassato +
+            // velocity longitudinale mantenuta), non dal muso forzato oltre
+            // la sterzo. Cosi' il kart segue il joystick in curve complete
+            // (anche tornanti / 360) senza bloccarsi a 180 gradi.
+            // Mathf.DeltaAngle gestisce il wrap-around a 180 senza flip.
             if (isDriftingActive)
             {
+                if (desiredMoveDirection.sqrMagnitude <= 0.001f)
+                    return;
+
                 Vector3 driftCurrentFwd = transform.forward;
                 driftCurrentFwd.y = 0f;
                 driftCurrentFwd.Normalize();
 
-                // Base dir = il joystick (camera-relative), NON piu' fissato
-                // alla direzione di ingresso. Fallback a driftEntryVelocityDir
-                // quando il joystick e' neutro. Cosi' il muso puo' seguire il
-                // joystick in curve complete, anche oltre 180° / 360°, e il
-                // kart riesce a completare tornanti lunghi in drift continuo.
-                Vector3 baseDir = desiredMoveDirection;
-                baseDir.y = 0f;
-                if (baseDir.sqrMagnitude < 0.001f)
-                    baseDir = driftEntryVelocityDir;
-                baseDir.Normalize();
-                if (baseDir.sqrMagnitude < 0.001f)
-                    baseDir = driftCurrentFwd;
+                Vector3 driftDesiredFwd = desiredMoveDirection;
+                driftDesiredFwd.y = 0f;
+                driftDesiredFwd.Normalize();
+                if (driftDesiredFwd.sqrMagnitude < 0.001f)
+                    driftDesiredFwd = driftCurrentFwd;
 
-                // Oversteer offset: il muso punta "oltre" la direzione di
-                // sterzo di activeDriftAngle * driftSign. driftSign resta
-                // bloccato all'ingresso (destra/sinistra) per stabilizzare la
-                // derapata come in Mario Kart.
-                float targetAngle = activeDriftAngle * driftSign;
-                Vector3 driftTargetForward = Quaternion.AngleAxis(targetAngle, Vector3.up) * baseDir;
-
-                desiredMoveDirection = driftTargetForward;
-                desiredMoveAmount = 1f;
-
-                // Wrap-around via Mathf.DeltaAngle: evita il flip di
-                // Vector3.SignedAngle a ±180° (che faceva bloccare il muso
-                // e ripartire dall'altra parte quando il joystick superava il
-                // punto di inversione).
-                float targetYaw = Mathf.Atan2(driftTargetForward.x, driftTargetForward.z) * Mathf.Rad2Deg;
+                float targetYaw = Mathf.Atan2(driftDesiredFwd.x, driftDesiredFwd.z) * Mathf.Rad2Deg;
                 float currentYaw = Mathf.Atan2(driftCurrentFwd.x, driftCurrentFwd.z) * Mathf.Rad2Deg;
                 float driftDeltaYaw = Mathf.DeltaAngle(currentYaw, targetYaw);
 
-                float driftMaxStep = activeDriftAngleRealignSpeed * Time.fixedDeltaTime;
+                float driftMaxStep = activeDriftMaxTurnRate * Time.fixedDeltaTime;
                 float driftAppliedYaw = Mathf.Clamp(driftDeltaYaw, -driftMaxStep, driftMaxStep);
                 transform.Rotate(0f, driftAppliedYaw, 0f, Space.World);
 
+                // Angolo fra muso e joystick: usato da Step 3 per la carica
+                // boost (carica solo se |angolo| >= activeDriftChargeMinAngle).
                 currentSignedAngleToDesired = driftDeltaYaw;
                 lastSteerAmount = 1f;
                 return;
@@ -955,13 +950,18 @@ private void UpdateSkateRampLaunchState()
             float absAngle = Mathf.Abs(currentSignedAngleToDesired);
             float targetForwardSpeed = desiredMoveAmount * maxSpeed * speedMultiplier;
 
-            // DRIFT ATTIVO: la velocita' longitudinale target e' un rettone
-            // della speed catturata all'ingresso. La decelerazione naturale
-            // (forwardRate = acceleration/deceleration a seconda) smorza
-            // progressivamente la velocita' mentre la derapata scorre.
             if (isDriftingActive)
             {
-                targetForwardSpeed = driftEntrySpeed * activeDriftForwardRetention;
+                // DRIFT ATTIVO: target = max(retention*entry, floor). Il floor
+                // garantisce che il kart non scenda sotto activeDriftMinForwardSpeed
+                // nemmeno durante una derapata strettissima (360 su se stesso):
+                // cosi' la planarSpeed resta sopra activeDriftMinSpeed e il
+                // drift non esce piu' per bassa velocita'. Il tasto Brake
+                // comunque lo fa uscire (override sotto).
+                targetForwardSpeed = Mathf.Max(
+                    driftEntrySpeed * activeDriftForwardRetention,
+                    activeDriftMinForwardSpeed
+                );
             }
             else if (desiredMoveAmount <= 0.001f)
             {
@@ -1001,6 +1001,19 @@ private void UpdateSkateRampLaunchState()
                 targetForwardSpeed,
                 forwardRate * Time.fixedDeltaTime
             );
+
+            // HARD FLOOR durante drift attivo: il target e' un max(retention,
+            // floor) ma MoveTowards ci arriva a rate 'acceleration'. Se il muso
+            // e' ortogonale alla velocity (es. ingresso drift), forwardSpeed
+            // parte da 0 e impiega ~0.6s a raggiungere il floor. Percepita
+            // come "perdo velocita'". Forzo qui il floor immediato: se sei in
+            // drift attivo e non stai frenando, forwardSpeed non scende sotto
+            // activeDriftMinForwardSpeed. Rende il floor un vero hard floor.
+            // Il Brake (vedi sopra) bypassa questo if perche' azzera target.
+            if (isDriftingActive && !input.Brake)
+            {
+                forwardSpeed = Mathf.Max(forwardSpeed, activeDriftMinForwardSpeed);
+            }
 
             float lateralFriction = groundLateralFriction;
 
@@ -1094,16 +1107,20 @@ private void UpdateSkateRampLaunchState()
 
             float targetYaw = 0f;
 
-            // DRIFT ATTIVO: l'ampiezza dell'inclinazione visiva cresce con
-            // la carica. Il segno e' driftSign (bloccato all'ingresso):
-            // durante l'attivo il muso rincorre il target di derapata, quindi
-            // l'angolo fra muso e desiredMoveDirection tende a zero e non e'
-            // un buon indicatore del drift. Usiamo direttamente driftSign.
+            // DRIFT ATTIVO: inclinazione visiva lieve, proporzionale allo sterzo
+            // (angolo fra muso e direzione del joystick). Il muso segue il
+            // joystick, quindi usiamo lo stesso indicatore del passivo ma
+            // scalato da activeDriftVisualYawScale (default 0.4 = 40% del
+            // passivo). Il kart resta sostanzialmente dritto, niente 'lean'
+            // marcato.
             if (isDriftingActive)
             {
-                float chargeT = Mathf.InverseLerp(0f, activeDriftBoostMaxCharge, driftCharge);
-                float ampMul = Mathf.Lerp(1f, 1.5f, chargeT);
-                targetYaw = driftSign * driftVisualYawDegrees * ampMul;
+                if (desiredMoveDirection.sqrMagnitude > 0.001f)
+                {
+                    float signedAngle = Vector3.SignedAngle(transform.forward, desiredMoveDirection, Vector3.up);
+                    float steer = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
+                    targetYaw = steer * driftVisualYawDegrees * activeDriftVisualYawScale;
+                }
             }
             else if (IsDrifting && desiredMoveDirection.sqrMagnitude > 0.001f)
             {
