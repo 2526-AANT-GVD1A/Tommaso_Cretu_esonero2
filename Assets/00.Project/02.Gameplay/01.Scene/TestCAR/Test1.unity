@@ -7962,6 +7962,8 @@ MonoBehaviour:
   requiredTag: Player
   oneShot: 0
   targetCamera: {fileID: 1614856960}
+  activateOnEnter: []
+  deactivateOnEnter: []
 --- !u!65 &1874502662
 BoxCollider:
   m_ObjectHideFlags: 0

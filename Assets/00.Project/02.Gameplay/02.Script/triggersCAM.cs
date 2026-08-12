@@ -20,6 +20,13 @@ namespace ArcadeKart.Utility
         [SerializeField, Tooltip("Riferimento esplicito alla camera. Se vuoto, cerca Camera.main.")]
         private PhasedFollowCamera targetCamera;
 
+        [Header("Oggetti da attivare/disattivare all'ingresso")]
+        [SerializeField, Tooltip("Oggetti (es. elementi del Canvas) da attivare quando questo trigger viene toccato.")]
+        private GameObject[] activateOnEnter = System.Array.Empty<GameObject>();
+
+        [SerializeField, Tooltip("Oggetti (es. elementi del Canvas) da disattivare quando questo trigger viene toccato.")]
+        private GameObject[] deactivateOnEnter = System.Array.Empty<GameObject>();
+
         private bool used;
 
         private void Reset()
@@ -52,8 +59,25 @@ namespace ArcadeKart.Utility
             if (!changed)
                 return;
 
+            ApplyToggleState();
+
             if (oneShot)
                 used = true;
+        }
+
+        private void ApplyToggleState()
+        {
+            for (int i = 0; i < activateOnEnter.Length; i++)
+            {
+                if (activateOnEnter[i] != null)
+                    activateOnEnter[i].SetActive(true);
+            }
+
+            for (int i = 0; i < deactivateOnEnter.Length; i++)
+            {
+                if (deactivateOnEnter[i] != null)
+                    deactivateOnEnter[i].SetActive(false);
+            }
         }
     }
 }
