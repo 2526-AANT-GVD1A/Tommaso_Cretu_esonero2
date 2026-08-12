@@ -127,6 +127,9 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("HARD FLOOR (unita'/sec) della velocita' longitudinale locale durante il drift attivo. Il kart non scende mai sotto questo valore finche' resta in drift: niente perdita di boost per derapate strette / 360. Pero' un impatto col muro puo' comunque abbassare la planarSpeed sotto activeDriftMinSpeed e far uscire il drift (vedi activeDriftMinSpeed).")]
         private float activeDriftMinForwardSpeed = 8f;
 
+        [SerializeField, Tooltip("Rate (unita'/sec^2) con cui forwardSpeed raggiunge l'hard floor (activeDriftMinForwardSpeed) durante il drift attivo. Graduale per evitare scatti quando entri in drift subito dopo un'inversione a 180 senza Shift: il muso e' gia' reindirizzato ma la velocity locale e' ~0, e il floor la porta su morbida. Abbastanza rapido da sostenere il kart in derapata stretta.")]
+        private float activeDriftFloorCatchUpRate = 40f;
+
         [SerializeField, Tooltip("Cap hard (gradi/sec) di quanto il muso puo' ruotare verso il joystick durante il drift attivo. Previene spin istantanei: niente 360 in 0.1 sec anche se il joystick fa cerchi completi. Indipendente dalla sterzata normale (turnRate).")]
         private float activeDriftMaxTurnRate = 150f;
 
@@ -952,16 +955,12 @@ private void UpdateSkateRampLaunchState()
 
             if (isDriftingActive)
             {
-                // DRIFT ATTIVO: target = max(retention*entry, floor). Il floor
-                // garantisce che il kart non scenda sotto activeDriftMinForwardSpeed
-                // nemmeno durante una derapata strettissima (360 su se stesso):
-                // cosi' la planarSpeed resta sopra activeDriftMinSpeed e il
-                // drift non esce piu' per bassa velocita'. Il tasto Brake
-                // comunque lo fa uscire (override sotto).
-                targetForwardSpeed = Mathf.Max(
-                    driftEntrySpeed * activeDriftForwardRetention,
-                    activeDriftMinForwardSpeed
-                );
+                // DRIFT ATTIVO: target = retention*entry. Il floor e' applicato
+                // dopo il MoveTowards con un catch-up graduale
+                // (activeDriftFloorCatchUpRate) per evitare scatti quando si
+                // entra in drift subito dopo un'inversione a 180 senza Shift:
+                // il muso e' gia' reindirizzato ma forwardSpeed locale e' ~0.
+                targetForwardSpeed = driftEntrySpeed * activeDriftForwardRetention;
             }
             else if (desiredMoveAmount <= 0.001f)
             {
@@ -1002,17 +1001,23 @@ private void UpdateSkateRampLaunchState()
                 forwardRate * Time.fixedDeltaTime
             );
 
-            // HARD FLOOR durante drift attivo: il target e' un max(retention,
-            // floor) ma MoveTowards ci arriva a rate 'acceleration'. Se il muso
-            // e' ortogonale alla velocity (es. ingresso drift), forwardSpeed
-            // parte da 0 e impiega ~0.6s a raggiungere il floor. Percepita
-            // come "perdo velocita'". Forzo qui il floor immediato: se sei in
-            // drift attivo e non stai frenando, forwardSpeed non scende sotto
-            // activeDriftMinForwardSpeed. Rende il floor un vero hard floor.
-            // Il Brake (vedi sopra) bypassa questo if perche' azzera target.
+            // HARD FLOOR durante drift attivo con catch-up graduale. Il target e'
+            // retention*entry, ma MoveTowards ci arriva a rate 'forwardRate'
+            // (acceleration/deceleration). Se il muso e' ortogonale alla
+            // velocity (ingresso drift o post-inversione a 180), forwardSpeed
+            // locale parte da 0. Con uno scatto (Mathf.Max) il kart balzerebbe
+            // subito a 8 nella nuova direzione del muso = accelerazione
+            // innaturale. Con MoveTowards a rate dedicato (activeDriftFloorCatchUpRate)
+            // la forwardSpeed raggiunge il floor in modo graduale (~0.2s),
+            // sostenendo comunque il kart in derapata stretta (360 su se stesso)
+            // senza farlo fermare. Il Brake bypassa questo if.
             if (isDriftingActive && !input.Brake)
             {
-                forwardSpeed = Mathf.Max(forwardSpeed, activeDriftMinForwardSpeed);
+                forwardSpeed = Mathf.MoveTowards(
+                    forwardSpeed,
+                    Mathf.Max(forwardSpeed, activeDriftMinForwardSpeed),
+                    activeDriftFloorCatchUpRate * Time.fixedDeltaTime
+                );
             }
 
             float lateralFriction = groundLateralFriction;
