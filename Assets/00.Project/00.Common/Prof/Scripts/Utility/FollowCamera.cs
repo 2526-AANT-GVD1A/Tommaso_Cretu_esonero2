@@ -138,7 +138,16 @@ namespace ArcadeKart.Utility
                 cam.fieldOfView = currentPhase.fieldOfView;
         }
 
-        private void LateUpdate()
+        // Follow in FixedUpdate (non in LateUpdate): il target e' un Rigidbody
+        // con interpolation = None, quindi la sua transform avanza a gradini
+        // nel fixed step (50 Hz). Leggendola in LateUpdate (60 Hz o variabile)
+        // la desiredPos resta ferma per piu' frame render e poi salta, e il
+        // damping calcolato su Time.deltaTime produce stutter periodico.
+        // Muovendo la camera nello stesso fixed step del target, i due avanvano
+        // in lockstep: la posizione relativa resta stabile tra un frame render
+        // e l'altro e scompare lo jitter. Time.deltaTime in FixedUpdate vale
+        // fixedDeltaTime, quindi le formule di smoothing restano invariate.
+        private void FixedUpdate()
         {
             if (target == null)
             {
