@@ -5123,7 +5123,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveAction: {fileID: -1680190386980627800, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   brakeAction: {fileID: 0}
-  driftAction: {fileID: 0}
+  driftAction: {fileID: -7471211009204490832, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   resetAction: {fileID: 0}
   OnResetRequested:
     m_PersistentCalls:

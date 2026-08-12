@@ -109,6 +109,52 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo.")]
         private float driftVisualLerpSpeed = 8f;
 
+        [Header("Active Drift")]
+        [SerializeField, Tooltip("Velocita' minima del kart per attivare il drift attivo (Shift + sterzo).")]
+        private float activeDriftMinSpeed = 5f;
+
+        [SerializeField, Tooltip("Input di sterzo laterale (Move.x) minimo per entrare nel drift attivo.")]
+        [Range(0f, 1f)]
+        private float activeDriftMinSteer = 0.35f;
+
+        [SerializeField, Tooltip("Angolo target di derapata (gradi) rispetto alla direzione di marcia catturata all'ingresso.")]
+        private float activeDriftAngle = 30f;
+
+        [SerializeField, Tooltip("Velocita' angular (gradi/sec) con cui il muso rincorre l'angolo di derapata.")]
+        private float activeDriftAngleRealignSpeed = 220f;
+
+        [SerializeField, Tooltip("Quanto l'input di sterzo (Move.x) puo' stringere/allargare l'angolo di derapata mentre tieni Shift. 0 = angolo fisso, 1 = autorita' piena.")]
+        [Range(0f, 1f)]
+        private float activeDriftSteerAuthority = 0.6f;
+
+        [SerializeField, Tooltip("Grip laterale durante il drift attivo (separato dal drift passivo).")]
+        private float activeDriftLateralFriction = 3f;
+
+        [SerializeField, Tooltip("Frazione della speed all'ingresso tenuta come velocita' longitudinale target durante la derapata. 1 = conserva, <1 = decelera leggermente.")]
+        [Range(0f, 1f)]
+        private float activeDriftForwardRetention = 0.95f;
+
+        [SerializeField, Tooltip("Velocita' di accumulo della carica (unita'/sec). Aumenta driftCharge nel tempo.")]
+        private float driftChargeRate = 1f;
+
+        [SerializeField, Tooltip("Tempo minimo di carica per ottenere un boost al rilascio del drift attivo. Sotto questa soglia il rilascio non da' boost.")]
+        private float driftMinChargeForBoost = 0.3f;
+
+        [SerializeField, Tooltip("Durata massima di carica: oltre questa soglia il boost resta al massimo.")]
+        private float activeDriftBoostMaxCharge = 1.5f;
+
+        [SerializeField, Tooltip("Magnitude minima del boost in uscita (moltiplicatore speed).")]
+        private float activeDriftBoostMagnitudeMin = 1.25f;
+
+        [SerializeField, Tooltip("Magnitude massima del boost in uscita (moltiplicatore speed).")]
+        private float activeDriftBoostMagnitudeMax = 1.7f;
+
+        [SerializeField, Tooltip("Durata minima (sec) del boost in uscita.")]
+        private float activeDriftBoostDurationMin = 0.4f;
+
+        [SerializeField, Tooltip("Durata massima (sec) del boost in uscita.")]
+        private float activeDriftBoostDurationMax = 1.0f;
+
         [Header("Ground & Gravity")]
         [SerializeField, Tooltip("Gravita' custom applicata al kart.")]
         private float gravity = 30f;
@@ -216,6 +262,10 @@ namespace ArcadeKart.Core
             && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
             && input.Move.sqrMagnitude >= driftMinSteer * driftMinSteer;
 
+        public bool IsDriftingActive => isDriftingActive;
+
+        public float DriftCharge => driftCharge;
+
         public void ApplyBoost(float magnitude, float duration) =>
             StartMultiplier(Mathf.Max(1f, magnitude), duration);
 
@@ -232,6 +282,12 @@ namespace ArcadeKart.Core
             visualYawVelocity = 0f;
             hasVisualYawDegrees = true;
             hasVisualWorldRotation = false;
+
+            isDriftingActive = false;
+            driftCharge = 0f;
+            driftSign = 0f;
+            driftEntrySpeed = 0f;
+            driftEntryVelocityDir = Vector3.zero;
         }
 
         public void RespawnAt(Transform t)
@@ -298,6 +354,7 @@ namespace ArcadeKart.Core
             ApplySuspension();
             ApplyAirStabilization();
             UpdateCameraRelativeMoveDirection();
+            UpdateActiveDrift();
             UpdateSteering();
             UpdateVelocity();
         }
@@ -439,6 +496,12 @@ namespace ArcadeKart.Core
         private float lastReportedSpeed;
         private Quaternion driftVisualBaseRotation = Quaternion.identity;
         private float currentDriftYaw;
+
+        private bool isDriftingActive;
+        private float driftSign;
+        private float driftCharge;
+        private float driftEntrySpeed;
+        private Vector3 driftEntryVelocityDir;
         private float visualYawDegrees;
         private float visualYawVelocity;
         private bool hasVisualYawDegrees;
@@ -626,6 +689,62 @@ private void UpdateSkateRampLaunchState()
             desiredMoveDirection = move.normalized;
         }
 
+        private void UpdateActiveDrift()
+        {
+            Vector3 planarVel = rb.linearVelocity;
+            planarVel.y = 0f;
+            float planarSpeed = planarVel.magnitude;
+
+            if (isDriftingActive)
+            {
+                bool lostGround = !IsGrounded || planarSpeed < activeDriftMinSpeed;
+                bool releasedDrift = input.Drift == false;
+
+                if (lostGround || releasedDrift)
+                {
+                    bool wasCharged = driftCharge >= driftMinChargeForBoost;
+                    if (releasedDrift && wasCharged)
+                    {
+                        float t = Mathf.InverseLerp(driftMinChargeForBoost, activeDriftBoostMaxCharge, driftCharge);
+                        float mag = Mathf.Lerp(activeDriftBoostMagnitudeMin, activeDriftBoostMagnitudeMax, t);
+                        float dur = Mathf.Lerp(activeDriftBoostDurationMin, activeDriftBoostDurationMax, t);
+                        ApplyBoost(mag, dur);
+                    }
+
+                    isDriftingActive = false;
+                    driftCharge = 0f;
+                    driftSign = 0f;
+                    driftEntrySpeed = 0f;
+                    driftEntryVelocityDir = Vector3.zero;
+                    return;
+                }
+
+                driftCharge = Mathf.Min(driftCharge + driftChargeRate * Time.fixedDeltaTime, activeDriftBoostMaxCharge);
+            }
+            else
+            {
+                bool canEnter =
+                    input.Drift
+                    && IsGrounded
+                    && planarSpeed >= activeDriftMinSpeed
+                    && Mathf.Abs(input.Move.x) >= activeDriftMinSteer;
+
+                if (canEnter)
+                {
+                    float steerSign = Mathf.Sign(input.Move.x);
+                    if (steerSign == 0f) steerSign = 1f;
+
+                    isDriftingActive = true;
+                    driftSign = steerSign;
+                    driftEntrySpeed = planarSpeed;
+                    driftEntryVelocityDir = planarVel.sqrMagnitude > 0.0001f
+                        ? planarVel.normalized
+                        : Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f)).normalized;
+                    driftCharge = 0f;
+                }
+            }
+        }
+
         private void UpdateSteering()
         {
             currentSignedAngleToDesired = 0f;
@@ -636,6 +755,45 @@ private void UpdateSkateRampLaunchState()
             // Lancio skate: balistico, nessuno sterzo da input.
             if (skateRampLaunch)
                 return;
+
+            // ===== DRIFT ATTIVO: override completo della sterzata =====
+            // Il target non e' la direzione del movimento (camera-relative),
+            // ma un angolo fisso rispetto alla direzione di marcia catturata
+            // all'ingresso (driftEntryVelocityDir). Il muso rincorre quel
+            // target a velocita' angular costante (activeDriftAngleRealignSpeed),
+            // e Move.x puo' modulare (stringere/allargare) l'ampiezza secondo
+            // activeDriftSteerAuthority. Il segno dell'angolo (driftSign) resta
+            // bloccato all'ingresso, come stile Mario Kart "stretto".
+            if (isDriftingActive)
+            {
+                Vector3 driftCurrentFwd = transform.forward;
+                driftCurrentFwd.y = 0f;
+                driftCurrentFwd.Normalize();
+
+                Vector3 baseDir = driftEntryVelocityDir;
+                baseDir.y = 0f;
+                baseDir.Normalize();
+                if (baseDir.sqrMagnitude < 0.001f)
+                    baseDir = driftCurrentFwd;
+
+                float steerInput = Mathf.Clamp(input.Move.x, -1f, 1f);
+                float modulation = 1f + activeDriftSteerAuthority * steerInput * driftSign;
+                float targetAngle = activeDriftAngle * driftSign * modulation;
+                Vector3 driftTargetForward = Quaternion.AngleAxis(targetAngle, Vector3.up) * baseDir;
+
+                desiredMoveDirection = driftTargetForward;
+                desiredMoveAmount = 1f;
+
+                float driftSignedAngle = Vector3.SignedAngle(driftCurrentFwd, driftTargetForward, Vector3.up);
+
+                float driftMaxStep = activeDriftAngleRealignSpeed * Time.fixedDeltaTime;
+                float driftAppliedYaw = Mathf.Clamp(driftSignedAngle, -driftMaxStep, driftMaxStep);
+                transform.Rotate(0f, driftAppliedYaw, 0f, Space.World);
+
+                currentSignedAngleToDesired = driftSignedAngle;
+                lastSteerAmount = 1f;
+                return;
+            }
 
             if (desiredMoveDirection.sqrMagnitude <= 0.001f)
                 return;
@@ -781,7 +939,15 @@ private void UpdateSkateRampLaunchState()
             float absAngle = Mathf.Abs(currentSignedAngleToDesired);
             float targetForwardSpeed = desiredMoveAmount * maxSpeed * speedMultiplier;
 
-            if (desiredMoveAmount <= 0.001f)
+            // DRIFT ATTIVO: la velocita' longitudinale target e' un rettone
+            // della speed catturata all'ingresso. La decelerazione naturale
+            // (forwardRate = acceleration/deceleration a seconda) smorza
+            // progressivamente la velocita' mentre la derapata scorre.
+            if (isDriftingActive)
+            {
+                targetForwardSpeed = driftEntrySpeed * activeDriftForwardRetention;
+            }
+            else if (desiredMoveAmount <= 0.001f)
             {
                 targetForwardSpeed = 0f;
             }
@@ -826,6 +992,10 @@ private void UpdateSkateRampLaunchState()
             {
                 lateralFriction = airLateralFriction;
             }
+            else if (isDriftingActive)
+            {
+                lateralFriction = activeDriftLateralFriction;
+            }
             else if (IsDrifting)
             {
                 lateralFriction = driftLateralFriction;
@@ -833,7 +1003,11 @@ private void UpdateSkateRampLaunchState()
 
             float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
 
-            if (IsGrounded && lastSteerAmount > shoppingCartSlipSteerThreshold)
+            // Il drift attivo ha la sua grip dedicata: lo slip multiplier del
+            // "carrello della spesa" non deve intervenire (abbasserebbe di nuovo
+            // la grip ulteriormente in modo non desiderato). Si applica solo
+            // nel caso passivo.
+            if (!isDriftingActive && IsGrounded && lastSteerAmount > shoppingCartSlipSteerThreshold)
             {
                 float steerFactor = Mathf.InverseLerp(
                     shoppingCartSlipSteerThreshold,
@@ -904,7 +1078,18 @@ private void UpdateSkateRampLaunchState()
 
             float targetYaw = 0f;
 
-            if (IsDrifting && desiredMoveDirection.sqrMagnitude > 0.001f)
+            // DRIFT ATTIVO: l'ampiezza dell'inclinazione visiva cresce con
+            // la carica. Il segno e' driftSign (bloccato all'ingresso):
+            // durante l'attivo il muso rincorre il target di derapata, quindi
+            // l'angolo fra muso e desiredMoveDirection tende a zero e non e'
+            // un buon indicatore del drift. Usiamo direttamente driftSign.
+            if (isDriftingActive)
+            {
+                float chargeT = Mathf.InverseLerp(0f, activeDriftBoostMaxCharge, driftCharge);
+                float ampMul = Mathf.Lerp(1f, 1.5f, chargeT);
+                targetYaw = driftSign * driftVisualYawDegrees * ampMul;
+            }
+            else if (IsDrifting && desiredMoveDirection.sqrMagnitude > 0.001f)
             {
                 float signedAngle = Vector3.SignedAngle(transform.forward, desiredMoveDirection, Vector3.up);
                 float steer = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
