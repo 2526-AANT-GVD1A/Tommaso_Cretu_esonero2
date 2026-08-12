@@ -123,7 +123,7 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' angular (gradi/sec) con cui il muso rincorre l'angolo di derapata.")]
         private float activeDriftAngleRealignSpeed = 220f;
 
-        [SerializeField, Tooltip("Quanto l'input di sterzo (Move.x) puo' stringere/allargare l'angolo di derapata mentre tieni Shift. 0 = angolo fisso, 1 = autorita' piena.")]
+        [SerializeField, Tooltip("[Legacy] Non piu' usato: dal refactor la direzione del muso segue direttamente il joystick e Move.x influenza il target tramite baseDir. Lasciato per non invalidare i valori serializzati nelle scene.")]
         [Range(0f, 1f)]
         private float activeDriftSteerAuthority = 0.6f;
 
@@ -757,40 +757,56 @@ private void UpdateSkateRampLaunchState()
                 return;
 
             // ===== DRIFT ATTIVO: override completo della sterzata =====
-            // Il target non e' la direzione del movimento (camera-relative),
-            // ma un angolo fisso rispetto alla direzione di marcia catturata
-            // all'ingresso (driftEntryVelocityDir). Il muso rincorre quel
-            // target a velocita' angular costante (activeDriftAngleRealignSpeed),
-            // e Move.x puo' modulare (stringere/allargare) l'ampiezza secondo
-            // activeDriftSteerAuthority. Il segno dell'angolo (driftSign) resta
-            // bloccato all'ingresso, come stile Mario Kart "stretto".
+            // Il target del muso segue il joystick (camera-relative), shiftato
+            // di un offset di sovrasterzo (activeDriftAngle * driftSign). Il
+            // muso rincorre questo target a velocita' angular costante
+            // (activeDriftAngleRealignSpeed). L'angolo fra muso e velocity
+            // resta aperto (derapata) finche' lateralFriction non lo richiude.
+            // driftSign resta bloccato all'ingresso (destra/sinistra) come in
+            // Mario Kart. Mathf.DeltaAngle gestisce il wrap-around a 180°
+            // senza flip, cosi' il kart puo' curvare anche oltre 180° / 360°.
             if (isDriftingActive)
             {
                 Vector3 driftCurrentFwd = transform.forward;
                 driftCurrentFwd.y = 0f;
                 driftCurrentFwd.Normalize();
 
-                Vector3 baseDir = driftEntryVelocityDir;
+                // Base dir = il joystick (camera-relative), NON piu' fissato
+                // alla direzione di ingresso. Fallback a driftEntryVelocityDir
+                // quando il joystick e' neutro. Cosi' il muso puo' seguire il
+                // joystick in curve complete, anche oltre 180° / 360°, e il
+                // kart riesce a completare tornanti lunghi in drift continuo.
+                Vector3 baseDir = desiredMoveDirection;
                 baseDir.y = 0f;
+                if (baseDir.sqrMagnitude < 0.001f)
+                    baseDir = driftEntryVelocityDir;
                 baseDir.Normalize();
                 if (baseDir.sqrMagnitude < 0.001f)
                     baseDir = driftCurrentFwd;
 
-                float steerInput = Mathf.Clamp(input.Move.x, -1f, 1f);
-                float modulation = 1f + activeDriftSteerAuthority * steerInput * driftSign;
-                float targetAngle = activeDriftAngle * driftSign * modulation;
+                // Oversteer offset: il muso punta "oltre" la direzione di
+                // sterzo di activeDriftAngle * driftSign. driftSign resta
+                // bloccato all'ingresso (destra/sinistra) per stabilizzare la
+                // derapata come in Mario Kart.
+                float targetAngle = activeDriftAngle * driftSign;
                 Vector3 driftTargetForward = Quaternion.AngleAxis(targetAngle, Vector3.up) * baseDir;
 
                 desiredMoveDirection = driftTargetForward;
                 desiredMoveAmount = 1f;
 
-                float driftSignedAngle = Vector3.SignedAngle(driftCurrentFwd, driftTargetForward, Vector3.up);
+                // Wrap-around via Mathf.DeltaAngle: evita il flip di
+                // Vector3.SignedAngle a ±180° (che faceva bloccare il muso
+                // e ripartire dall'altra parte quando il joystick superava il
+                // punto di inversione).
+                float targetYaw = Mathf.Atan2(driftTargetForward.x, driftTargetForward.z) * Mathf.Rad2Deg;
+                float currentYaw = Mathf.Atan2(driftCurrentFwd.x, driftCurrentFwd.z) * Mathf.Rad2Deg;
+                float driftDeltaYaw = Mathf.DeltaAngle(currentYaw, targetYaw);
 
                 float driftMaxStep = activeDriftAngleRealignSpeed * Time.fixedDeltaTime;
-                float driftAppliedYaw = Mathf.Clamp(driftSignedAngle, -driftMaxStep, driftMaxStep);
+                float driftAppliedYaw = Mathf.Clamp(driftDeltaYaw, -driftMaxStep, driftMaxStep);
                 transform.Rotate(0f, driftAppliedYaw, 0f, Space.World);
 
-                currentSignedAngleToDesired = driftSignedAngle;
+                currentSignedAngleToDesired = driftDeltaYaw;
                 lastSteerAmount = 1f;
                 return;
             }
