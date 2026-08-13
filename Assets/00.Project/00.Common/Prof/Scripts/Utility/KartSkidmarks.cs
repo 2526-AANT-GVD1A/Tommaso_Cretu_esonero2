@@ -71,11 +71,13 @@ namespace ArcadeKart.Utility
         #region Internal
 
         private bool lastState;
+        private bool stateInitialized;
 
         private void ApplyState(bool drifting)
         {
             // Cambiamo i renderer solo quando lo stato cambia: niente write inutili ogni frame.
-            if (drifting == lastState) return;
+            if (stateInitialized && drifting == lastState) return;
+            stateInitialized = true;
             lastState = drifting;
 
             if (trails != null)

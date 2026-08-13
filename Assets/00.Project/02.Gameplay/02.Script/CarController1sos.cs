@@ -124,11 +124,8 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float activeDriftForwardRetention = 0.95f;
 
-        [SerializeField, Tooltip("HARD FLOOR (unita'/sec) della velocita' longitudinale locale durante il drift attivo. Il kart non scende mai sotto questo valore finche' resta in drift: niente perdita di boost per derapate strette / 360. Pero' un impatto col muro puo' comunque abbassare la planarSpeed sotto activeDriftMinSpeed e far uscire il drift (vedi activeDriftMinSpeed).")]
+        [SerializeField, Tooltip("FLOOR PLANARE (unita'/sec) della velocity mondiale durante il drift attivo. Il kart non scende mai sotto questa magnitudine finche' resta in drift: sostiene la speed anche durante un 360 (la componente locale forward oscilla col muso, ma la velocity totale resta sopra il floor). Gated sul muro: durante un impatto (WallContactActive) il floor e' disattivato, cosi' l'urto abbassa planarSpeed e fa uscire il drift (vedi activeDriftMinSpeed). Deve essere >= ad activeDriftMinSpeed per evitare uscite per bassa velocita'.")]
         private float activeDriftMinForwardSpeed = 8f;
-
-        [SerializeField, Tooltip("Rate (unita'/sec^2) con cui forwardSpeed raggiunge l'hard floor (activeDriftMinForwardSpeed) durante il drift attivo. Graduale per evitare scatti quando entri in drift subito dopo un'inversione a 180 senza Shift: il muso e' gia' reindirizzato ma la velocity locale e' ~0, e il floor la porta su morbida. Abbastanza rapido da sostenere il kart in derapata stretta.")]
-        private float activeDriftFloorCatchUpRate = 40f;
 
         [SerializeField, Tooltip("Cap hard (gradi/sec) di quanto il muso puo' ruotare verso il joystick durante il drift attivo. Previene spin istantanei: niente 360 in 0.1 sec anche se il joystick fa cerchi completi. Indipendente dalla sterzata normale (turnRate).")]
         private float activeDriftMaxTurnRate = 150f;
@@ -955,11 +952,10 @@ private void UpdateSkateRampLaunchState()
 
             if (isDriftingActive)
             {
-                // DRIFT ATTIVO: target = retention*entry. Il floor e' applicato
-                // dopo il MoveTowards con un catch-up graduale
-                // (activeDriftFloorCatchUpRate) per evitare scatti quando si
-                // entra in drift subito dopo un'inversione a 180 senza Shift:
-                // il muso e' gia' reindirizzato ma forwardSpeed locale e' ~0.
+                // DRIFT ATTIVO: target = retention*entry. Il floor planare che
+                // sostiene la speed durante il 360 e' applicato in fondo a
+                // UpdateVelocity (sulla velocity mondiale, non sulla componente
+                // locale), cosi' non c'e' scatto di direzione all'ingresso.
                 targetForwardSpeed = driftEntrySpeed * activeDriftForwardRetention;
             }
             else if (desiredMoveAmount <= 0.001f)
@@ -1000,25 +996,6 @@ private void UpdateSkateRampLaunchState()
                 targetForwardSpeed,
                 forwardRate * Time.fixedDeltaTime
             );
-
-            // HARD FLOOR durante drift attivo con catch-up graduale. Il target e'
-            // retention*entry, ma MoveTowards ci arriva a rate 'forwardRate'
-            // (acceleration/deceleration). Se il muso e' ortogonale alla
-            // velocity (ingresso drift o post-inversione a 180), forwardSpeed
-            // locale parte da 0. Con uno scatto (Mathf.Max) il kart balzerebbe
-            // subito a 8 nella nuova direzione del muso = accelerazione
-            // innaturale. Con MoveTowards a rate dedicato (activeDriftFloorCatchUpRate)
-            // la forwardSpeed raggiunge il floor in modo graduale (~0.2s),
-            // sostenendo comunque il kart in derapata stretta (360 su se stesso)
-            // senza farlo fermare. Il Brake bypassa questo if.
-            if (isDriftingActive && !input.Brake)
-            {
-                forwardSpeed = Mathf.MoveTowards(
-                    forwardSpeed,
-                    Mathf.Max(forwardSpeed, activeDriftMinForwardSpeed),
-                    activeDriftFloorCatchUpRate * Time.fixedDeltaTime
-                );
-            }
 
             float lateralFriction = groundLateralFriction;
 
@@ -1090,6 +1067,33 @@ private void UpdateSkateRampLaunchState()
 
                 if (finalVelocity.y > 0f)
                     finalVelocity.y = 0f;
+            }
+
+            // FLOOR PLANARE durante drift attivo: mantiene la magnitudine della
+            // velocity mondiale >= activeDriftMinForwardSpeed, nella DIREZIONE
+            // ATTUALE (non forza il muso forward). Cosi':
+            //  -Durante un 360 la velocity resta sostenuta anche quando il muso
+            //   ruota e la componente locale forward oscilla: planarSpeed non
+            //   scende sotto activeDriftMinSpeed e il drift NON esce piu' a meta'
+            //   rotazione (niente piu' 'gira normalmente e rientra').
+            //  -Niente scatto di DIREZIONE all'ingresso (a differenza del vecchio
+            //   Mathf.Max sul forwardSpeed locale, che forzava la velocity
+            //   lungo il muso appena reindirizzato). Qui si preserva la direzione
+            //   della velocity attuale, solo la magnitudine viene tirata su.
+            //  -Gated su !WallContactActive: durante un impatto col muro il floor
+            //   e' disattivato, quindi l'urto abbassa planarSpeed liberamente e il
+            //   frame dopo UpdateActiveDrift esce dal drift (come richiesto).
+            //  -Il Brake bypassa (frena normalmente).
+            if (isDriftingActive && !input.Brake && !WallContactActive)
+            {
+                Vector3 planar = new Vector3(finalVelocity.x, 0f, finalVelocity.z);
+                float planarMag = planar.magnitude;
+                if (planarMag > 0.0001f && planarMag < activeDriftMinForwardSpeed)
+                {
+                    float scale = activeDriftMinForwardSpeed / planarMag;
+                    finalVelocity.x *= scale;
+                    finalVelocity.z *= scale;
+                }
             }
 
             rb.linearVelocity = finalVelocity;
