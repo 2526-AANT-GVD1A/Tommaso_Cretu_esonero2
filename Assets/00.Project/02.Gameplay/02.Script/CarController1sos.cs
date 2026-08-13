@@ -127,6 +127,9 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("FLOOR PLANARE (unita'/sec) della velocity mondiale durante il drift attivo. Il kart non scende mai sotto questa magnitudine finche' resta in drift: sostiene la speed anche durante un 360 (la componente locale forward oscilla col muso, ma la velocity totale resta sopra il floor). Gated sul muro: durante un impatto (WallContactActive) il floor e' disattivato, cosi' l'urto abbassa planarSpeed e fa uscire il drift (vedi activeDriftMinSpeed). Deve essere >= ad activeDriftMinSpeed per evitare uscite per bassa velocita'.")]
         private float activeDriftMinForwardSpeed = 8f;
 
+        [SerializeField, Tooltip("Tempo di tolleranza (sec) prima di uscire dal drift attivo per perdita di grounding. Bump brevi su curb/disconnessioni del terreno (IsGrounded=false per pochi frame) NON spezzano il drift. Solo dopo questo tempo di volo prolungato (es. salto vero, skate ramp) il drift si interrompe. Previene le false exit su lievi sbalzi di terreno durante una curva.")]
+        private float activeDriftExitGraceTime = 0.10f;
+
         [SerializeField, Tooltip("Cap hard (gradi/sec) di quanto il muso puo' ruotare verso il joystick durante il drift attivo. Previene spin istantanei: niente 360 in 0.1 sec anche se il joystick fa cerchi completi. Indipendente dalla sterzata normale (turnRate).")]
         private float activeDriftMaxTurnRate = 150f;
 
@@ -250,11 +253,12 @@ namespace ArcadeKart.Core
         public bool IsGrounded { get; private set; }
 
         public bool IsDrifting =>
-            input != null
-            && input.Drift
-            && IsGrounded
-            && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
-            && input.Move.sqrMagnitude >= driftMinSteer * driftMinSteer;
+            IsDriftingActive
+            || (input != null
+                && input.Drift
+                && IsGrounded
+                && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
+                && input.Move.sqrMagnitude >= driftMinSteer * driftMinSteer);
 
         public bool IsDriftingActive => isDriftingActive;
 
@@ -283,6 +287,8 @@ namespace ArcadeKart.Core
             driftCharge = 0f;
             driftEntrySpeed = 0f;
             isDriftCharged = false;
+            driftLastGroundedTime = -999f;
+            pendingCrashExit = false;
         }
 
         public void RespawnAt(Transform t)
@@ -337,6 +343,23 @@ namespace ArcadeKart.Core
             visualYawDegrees = transform.eulerAngles.y;
             visualYawVelocity = 0f;
             hasVisualYawDegrees = true;
+
+            // Sottoscriviamo OnImpact: usato come trigger di "crash vero" per
+            // far uscire il drift attivo solo in caso di urto forte (vedi
+            // impactThreshold). I lievi sfregamenti contro muri o ostacoli NON
+            // spezzano il drift: il floor planare resta sempre attivo.
+            OnImpact.AddListener(HandleKartImpact);
+        }
+
+        private void OnDestroy()
+        {
+            OnImpact.RemoveListener(HandleKartImpact);
+        }
+
+        private void HandleKartImpact(float v)
+        {
+            if (isDriftingActive)
+                pendingCrashExit = true;
         }
 
         private void FixedUpdate()
@@ -496,6 +519,8 @@ namespace ArcadeKart.Core
         private float driftCharge;
         private float driftEntrySpeed;
         private bool isDriftCharged;
+        private float driftLastGroundedTime = -999f;
+        private bool pendingCrashExit;
         private float visualYawDegrees;
         private float visualYawVelocity;
         private bool hasVisualYawDegrees;
@@ -685,21 +710,65 @@ private void UpdateSkateRampLaunchState()
 
         private void UpdateActiveDrift()
         {
+            // FLOOR PLANARE applicato in testa (prima dell'exit-check): tira su
+            // planarSpeed a >= floor SEMPRE (non piu' gated su WallContactActive).
+            // Cosi' nemmeno un lieve sfregamento contro un muro/ostacolo fa
+            // collassare planarSpeed sotto activeDriftMinSpeed causando false
+            // exit. Il crash vero e' gestito da OnImpact (vedi pendingCrashExit),
+            // non dalla velocita'.
+            if (isDriftingActive && !input.Brake)
+            {
+                Vector3 pf = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+                float pm = pf.magnitude;
+                if (pm > 0.0001f && pm < activeDriftMinForwardSpeed)
+                {
+                    float scale = activeDriftMinForwardSpeed / pm;
+                    Vector3 fv = rb.linearVelocity;
+                    fv.x *= scale;
+                    fv.z *= scale;
+                    rb.linearVelocity = fv;
+                }
+            }
+
             Vector3 planarVel = rb.linearVelocity;
             planarVel.y = 0f;
             float planarSpeed = planarVel.magnitude;
 
+            // Calcoli condivisi (inclusi per log), calcolati qui fuori dal branch.
+            Vector3 bodyFwdXZ = Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f));
+            if (bodyFwdXZ.sqrMagnitude > 0.0001f) bodyFwdXZ.Normalize();
+            else bodyFwdXZ = Vector3.forward;
+            float fwdDot = Vector3.Dot(bodyFwdXZ, planarVel);
+            bool goingForward = fwdDot >= 0f;
+            float angleToJoystick = Mathf.Abs(currentSignedAngleToDesired);
+            float moveX = (input != null) ? input.Move.x : 0f;
+            bool driftHeld = (input != null) && input.Drift;
+            bool wallContact = WallContactActive;
+
             if (isDriftingActive)
             {
-                bool lostGround = !IsGrounded || planarSpeed < activeDriftMinSpeed;
-                bool releasedDrift = input.Drift == false;
+                // Aggiorna timer di grounding per la grace. Bump brevi su curb
+                // (IsGrounded=false per pochi frame) NON spezzano il drift:
+                // servono activeDriftExitGraceTime di volo prolungato per
+                // uscire (salto vero, skate ramp).
+                if (IsGrounded)
+                    driftLastGroundedTime = Time.time;
 
-                if (lostGround || releasedDrift)
+                bool lostGround = (Time.time - driftLastGroundedTime) > activeDriftExitGraceTime;
+                bool releasedDrift = !driftHeld;
+                // Crash vero: gestito da OnImpact (urto >= impactThreshold).
+                // pendingCrashExit e' settato in HandleKartImpact e consumato qui.
+                // I lievi sfregamenti (sotto threshold) NON causano uscita: il
+                // floor planare protegge la velocita' sempre.
+                bool hardCrash = pendingCrashExit;
+                pendingCrashExit = false;
+
+                if (lostGround || releasedDrift || hardCrash)
                 {
                     // Uscita INTELLIGENTE:
                     //  - Rilascio Shift con carica completata -> ApplyBoost
                     //    (singola fase, magnitude/duration fissi).
-                    //  - Crash (planarSpeed < activeDriftMinSpeed) o salto ->
+                    //  - Crash (OnImpact forte) o salto prolungato ->
                     //    reset senza boost. isDriftCharged decide se boostare,
                     //    NON driftCharge direttamente, cosi' il boost si ha
                     //    solo se hai sterzato abbastanza a lungo.
@@ -721,7 +790,6 @@ private void UpdateSkateRampLaunchState()
                 // NON decade. Cosi' puoi caricare, poi andare dritto/cambiare
                 // direzione senza perdere il boost, e rilasciarlo quando vuoi.
                 // Clamp a activeDriftChargeTime: singola fase, non serve oltre.
-                float angleToJoystick = Mathf.Abs(currentSignedAngleToDesired);
                 if (angleToJoystick >= activeDriftChargeMinAngle)
                 {
                     driftCharge = Mathf.Min(
@@ -739,18 +807,36 @@ private void UpdateSkateRampLaunchState()
             }
             else
             {
+                // Anti-retromarcia: ri-entra in drift attivo SOLO se la velocity
+                // ha componente >= 0 lungo il forward del muso. Se il muso e'
+                // oltre 90 gradi rispetto alla velocity (es. dopo un'inversione
+                // che ha lasciato il kart momentaneamente "all'indietro"), la
+                // re-entry e' negata finche' la planarSpeed non ripassa nello
+                // stesso emisfero del muso. Previene il "drift attivo all'indietro"
+                // visto dopo le uscite brevi.
                 bool canEnter =
-                    input.Drift
+                    driftHeld
                     && IsGrounded
                     && planarSpeed >= activeDriftMinSpeed
-                    && Mathf.Abs(input.Move.x) >= activeDriftMinSteer;
+                    && Mathf.Abs(moveX) >= activeDriftMinSteer
+                    && goingForward;
 
                 if (canEnter)
                 {
+                    // Fix 4: driftEntrySpeed basato sulla componente forward
+                    // locale (localVelocity.z) invece di planarSpeed spurio.
+                    // Cosi' se entri in drift da una derapata laterale, il
+                    // target di retention non eccede la componente long. reale.
+                    Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
+                    float fwdSpeed = Mathf.Max(0f, localVel.z);
+                    if (fwdSpeed < 0.5f) fwdSpeed = planarSpeed;
+
                     isDriftingActive = true;
-                    driftEntrySpeed = planarSpeed;
+                    driftEntrySpeed = fwdSpeed;
                     driftCharge = 0f;
                     isDriftCharged = false;
+                    driftLastGroundedTime = Time.time;
+                    pendingCrashExit = false;
                 }
             }
         }
@@ -1080,11 +1166,11 @@ private void UpdateSkateRampLaunchState()
             //   Mathf.Max sul forwardSpeed locale, che forzava la velocity
             //   lungo il muso appena reindirizzato). Qui si preserva la direzione
             //   della velocity attuale, solo la magnitudine viene tirata su.
-            //  -Gated su !WallContactActive: durante un impatto col muro il floor
-            //   e' disattivato, quindi l'urto abbassa planarSpeed liberamente e il
-            //   frame dopo UpdateActiveDrift esce dal drift (come richiesto).
+            //  -NON piu' gated su WallContactActive: i lievi sfregamenti non
+            //   spezzano piu' il drift. Il crash vero e' gestito da OnImpact
+            //   (pendingCrashExit), non dalla velocita'.
             //  -Il Brake bypassa (frena normalmente).
-            if (isDriftingActive && !input.Brake && !WallContactActive)
+            if (isDriftingActive && !input.Brake)
             {
                 Vector3 planar = new Vector3(finalVelocity.x, 0f, finalVelocity.z);
                 float planarMag = planar.magnitude;
