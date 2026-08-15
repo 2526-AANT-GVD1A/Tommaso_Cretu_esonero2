@@ -148,6 +148,9 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Durata (sec) del boost in uscita al rilascio dello Shift con carica completata. Singola fase: valore fisso.")]
         private float activeDriftBoostDuration = 0.8f;
 
+        [SerializeField, Tooltip("Kick istantaneo di velocita' in avanti (unita'/sec) applicato al rilascio del drift carico. A differenza del multiplier (graduale) questo si sente subito come uno 'scatto' in avanti. 0 = niente kick, solo multiplier. ~8 = scatto netto stile mini-turbo.")]
+        private float activeDriftBoostKick = 8f;
+
         [SerializeField, Tooltip("Inclinazione visiva (yaw del mesh) durante il drift attivo, come frazione del drift passivo. 0 = nessuna inclinazione, 0.4 = lieve (40% del passivo), 1 = identica al passivo. Il muso segue il joystick, il kart resta sostanzialmente dritto.")]
         [Range(0f, 1f)]
         private float activeDriftVisualYawScale = 0.4f;
@@ -775,6 +778,27 @@ private void UpdateSkateRampLaunchState()
                     if (releasedDrift && isDriftCharged)
                     {
                         ApplyBoost(activeDriftBoostMagnitude, activeDriftBoostDuration);
+
+                        // KICK istantaneo: oltre al multiplier (graduale via
+                        // speedMultiplier), applichiamo uno scatto immediato
+                        // di velocity lungo il forward del muso. Cosi' il boost
+                        // si vede appena rilasciato, invece di dover aspettare
+                        // che l'acceleration porti la speed verso il nuovo
+                        // target. Necessario perche' dopo un drift attivo la
+                        // forwardSpeed locale parte bassa (floor) e il solo
+                        // multiplier impiega ~0.8s per rendersi visibile.
+                        // Skip se Brake (frena comunque).
+                        if (activeDriftBoostKick > 0f && !input.Brake && IsGrounded)
+                        {
+                            Vector3 fwd = Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f)).normalized;
+                            if (fwd.sqrMagnitude > 0.001f)
+                            {
+                                Vector3 v = rb.linearVelocity;
+                                v.x += fwd.x * activeDriftBoostKick;
+                                v.z += fwd.z * activeDriftBoostKick;
+                                rb.linearVelocity = v;
+                            }
+                        }
                     }
 
                     isDriftingActive = false;
@@ -784,13 +808,20 @@ private void UpdateSkateRampLaunchState()
                     return;
                 }
 
-                // Carica boost: accumula driftCharge SOLO se stai sterzando
-                // abbastanza (|angolo muso-vs-joystick| >= soglia). Sticky:
-                // se smetti di sterzare o cambi direzione, la carica accumulata
-                // NON decade. Cosi' puoi caricare, poi andare dritto/cambiare
-                // direzione senza perdere il boost, e rilasciarlo quando vuoi.
-                // Clamp a activeDriftChargeTime: singola fase, non serve oltre.
-                if (angleToJoystick >= activeDriftChargeMinAngle)
+                // Carica boost: accumula driftCharge se stai sterzando abbastanza.
+                // Due condizioni in OR (per supportare tastiera E joystick):
+                //  1. |angolo muso-vs-joystick| >= soglia: caso joystick dove
+                //     spingi lo stick "oltre" la prua del kart e l'angolo resta
+                //     aperto finche' tieni lo stick inclinato.
+                //  2. isDriftingActive e |Move.x| >= activeDriftMinSteer: caso
+                //     tastiera. Con tastiera (W+D), il muso raggiunge subito
+                //     la direzione di marcia (angolo -> 0), ma il giocatore sta
+                //     comunque tenendo lo sterzo laterale D. Si carica anche
+                //     in questo caso. Se vai solo W dritto (moveX=0), non carichi.
+                bool angleSteering = angleToJoystick >= activeDriftChargeMinAngle;
+                bool inputSteering = Mathf.Abs(moveX) >= activeDriftMinSteer;
+                bool charging = angleSteering || inputSteering;
+                if (charging)
                 {
                     driftCharge = Mathf.Min(
                         driftCharge + driftChargeRate * Time.fixedDeltaTime,

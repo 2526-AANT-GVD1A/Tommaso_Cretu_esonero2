@@ -5126,17 +5126,17 @@ MonoBehaviour:
   driftVisual: {fileID: 1715983992}
   driftVisualYawDegrees: 25
   driftVisualLerpSpeed: 8
-  activeDriftMinSpeed: 3
+  activeDriftMinSpeed: 1
   activeDriftMinSteer: 0.35
   activeDriftLateralFriction: 3
   activeDriftForwardRetention: 0.95
   activeDriftMinForwardSpeed: 6
-  activeDriftFloorCatchUpRate: 10
+  activeDriftExitGraceTime: 0.1
   activeDriftMaxTurnRate: 150
   activeDriftChargeMinAngle: 15
-  activeDriftChargeTime: 1
+  activeDriftChargeTime: 0.1
   driftChargeRate: 1
-  activeDriftBoostMagnitude: 1.5
+  activeDriftBoostMagnitude: 20
   activeDriftBoostDuration: 0.8
   activeDriftVisualYawScale: 0.4
   gravity: 30
