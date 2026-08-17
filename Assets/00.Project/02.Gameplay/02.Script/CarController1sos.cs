@@ -808,19 +808,19 @@ private void UpdateSkateRampLaunchState()
                     return;
                 }
 
-                // Carica boost: accumula driftCharge se stai sterzando abbastanza.
-                // Due condizioni in OR (per supportare tastiera E joystick):
-                //  1. |angolo muso-vs-joystick| >= soglia: caso joystick dove
-                //     spingi lo stick "oltre" la prua del kart e l'angolo resta
-                //     aperto finche' tieni lo stick inclinato.
-                //  2. isDriftingActive e |Move.x| >= activeDriftMinSteer: caso
-                //     tastiera. Con tastiera (W+D), il muso raggiunge subito
-                //     la direzione di marcia (angolo -> 0), ma il giocatore sta
-                //     comunque tenendo lo sterzo laterale D. Si carica anche
-                //     in questo caso. Se vai solo W dritto (moveX=0), non carichi.
-                bool angleSteering = angleToJoystick >= activeDriftChargeMinAngle;
-                bool inputSteering = Mathf.Abs(moveX) >= activeDriftMinSteer;
-                bool charging = angleSteering || inputSteering;
+                // Carica boost: accumula driftCharge SOLO se stai curvando davvero,
+                // cioe' c'e' un angolo effettivo fra muso del kart e direzione
+                // del joystick (|angolo| >= activeDriftChargeMinAngle). Non
+                // basta premere W+D con muso gia' allineato (angolo=0): in quel
+                // caso NON carichi. Per caricare devi essere in curva, con il
+                // muso del kart ancora non allineato alla direzione di sterzo.
+                // STICKY: se smetti di curvare (muso si allinea, angolo -> 0)
+                // ma tieni Shift, la carica accumulata NON decade: rimane ferma
+                // al valore raggiunto. Riprende a salire se ricominci a
+                // curvare (angolo risale sopra soglia). Cosi' il giocatore
+                // puo' caricare a tratti, rilasciando lo sterzo fra una
+                // curva e l'altra, senza perdere il progresso.
+                bool charging = angleToJoystick >= activeDriftChargeMinAngle;
                 if (charging)
                 {
                     driftCharge = Mathf.Min(
