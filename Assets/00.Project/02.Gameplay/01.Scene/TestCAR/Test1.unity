@@ -5132,13 +5132,15 @@ MonoBehaviour:
   activeDriftForwardRetention: 0.95
   activeDriftMinForwardSpeed: 6
   activeDriftExitGraceTime: 0.1
-  activeDriftMaxTurnRate: 150
+  activeDriftMaxTurnRate: 100
   activeDriftChargeMinAngle: 15
   activeDriftChargeTime: 0.1
   driftChargeRate: 1
   activeDriftBoostMagnitude: 20
   activeDriftBoostDuration: 0.8
+  activeDriftBoostKick: 8
   activeDriftVisualYawScale: 0.4
+  activeDriftVisualLerpSpeed: 12
   gravity: 30
   airControl: 0
   groundCheckDistance: 1

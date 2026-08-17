@@ -117,8 +117,8 @@ namespace ArcadeKart.Core
         [Range(0f, 1f)]
         private float activeDriftMinSteer = 0.35f;
 
-        [SerializeField, Tooltip("Grip laterale durante il drift attivo (separato dal drift passivo). Basso = la velocity slitta rispetto al muso (derapata).")]
-        private float activeDriftLateralFriction = 3f;
+        [SerializeField, Tooltip("Grip laterale durante il drift attivo (separato dal drift passivo). Basso = la velocity slitta rispetto al muso (derapata). Default basso (1.5) per far seguire la velocity al muso durante un 360: con grip 3 la velocity resta indietro e il drift appare lento.")]
+        private float activeDriftLateralFriction = 1.5f;
 
         [SerializeField, Tooltip("Frazione della speed all'ingresso tenuta come velocita' longitudinale target durante la derapata. 1 = conserva, <1 = decelera leggermente. Clamp in ogni caso al floor (activeDriftMinForwardSpeed).")]
         [Range(0f, 1f)]
@@ -132,6 +132,10 @@ namespace ArcadeKart.Core
 
         [SerializeField, Tooltip("Cap hard (gradi/sec) di quanto il muso puo' ruotare verso il joystick durante il drift attivo. Previene spin istantanei: niente 360 in 0.1 sec anche se il joystick fa cerchi completi. Indipendente dalla sterzata normale (turnRate).")]
         private float activeDriftMaxTurnRate = 150f;
+
+        [SerializeField, Tooltip("Slip angle massimo (gradi, fra muso del kart e velocity) oltre il quale il muso rallenta per dare tempo alla velocity di seguire. Previene il 'girare su se stesso': se il muso ruota piu' veloce di quanto la velocity possa seguire, il kart appare ruotare sul posto. Sotto meta' di questo valore il muso gira liberamente; tra meta' e questo valore rallenta graduariamente; sopra si ferma. Default 90 = slip angle massimo ragionevole per una derapata visibile.")]
+        [Range(45f, 180f)]
+        private float activeDriftMaxSlipAngle = 90f;
 
         [SerializeField, Tooltip("Angolo minimo (gradi) fra muso del kart e direzione del joystick per accumulare carica boost. Sotto questa soglia (es. vai dritto) NON carichi. La carica accumulata resta pero' sticky (non decade): serve a impedire 'charge for free' andando dritto.")]
         private float activeDriftChargeMinAngle = 15f;
@@ -154,6 +158,9 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Inclinazione visiva (yaw del mesh) durante il drift attivo, come frazione del drift passivo. 0 = nessuna inclinazione, 0.4 = lieve (40% del passivo), 1 = identica al passivo. Il muso segue il joystick, il kart resta sostanzialmente dritto.")]
         [Range(0f, 1f)]
         private float activeDriftVisualYawScale = 0.4f;
+
+        [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo durante il drift attivo (separato dal drift passivo). Default 12 = piu' veloce del passivo (8): la visual yaw torna a 0 rapidamente dopo un 360, niente 'rimane inclinato' residuo.")]
+        private float activeDriftVisualLerpSpeed = 12f;
 
         [Header("Ground & Gravity")]
         [SerializeField, Tooltip("Gravita' custom applicata al kart.")]
@@ -913,6 +920,33 @@ private void UpdateSkateRampLaunchState()
                 float driftDeltaYaw = Mathf.DeltaAngle(currentYaw, targetYaw);
 
                 float driftMaxStep = activeDriftMaxTurnRate * Time.fixedDeltaTime;
+
+                // CAP SULLO SLIP ANGLE: previene il "girare su se stesso".
+                // Se il muso ruota a maxTurnRate ma la velocity non ha tempo
+                // di seguire (grip laterale bassa), lo slip angle (muso vs
+                // velocity) cresce fino a 180 gradi e il kart appare ruotare sul
+                // posto. Limitiamo il muso quando lo slip angle supera una
+                // soglia: sotto meta' della soglia il muso gira liberamente,
+                // tra meta' e soglia rallenta graduariamente, sopra si ferma.
+                // Cosi' il kart "drifta" sempre (slip angle ragionevole), mai
+                // "gira su se stesso" (slip angle = 180).
+                Vector3 velXZ = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+                float slipAngleDeg = 0f;
+                if (velXZ.sqrMagnitude > 0.5f)
+                {
+                    velXZ.Normalize();
+                    slipAngleDeg = Mathf.Abs(Vector3.SignedAngle(driftCurrentFwd, velXZ, Vector3.up));
+                }
+
+                float slipCapFactor = 1f;
+                float softSlip = activeDriftMaxSlipAngle * 0.5f;
+                if (slipAngleDeg > softSlip)
+                {
+                    float t = Mathf.Clamp01((slipAngleDeg - softSlip) / (activeDriftMaxSlipAngle - softSlip));
+                    slipCapFactor = 1f - t;
+                }
+
+                driftMaxStep *= slipCapFactor;
                 float driftAppliedYaw = Mathf.Clamp(driftDeltaYaw, -driftMaxStep, driftMaxStep);
                 transform.Rotate(0f, driftAppliedYaw, 0f, Space.World);
 
@@ -1232,21 +1266,42 @@ private void UpdateSkateRampLaunchState()
                 return;
 
             float targetYaw = 0f;
+            float lerpSpeed = driftVisualLerpSpeed;
 
-            // DRIFT ATTIVO: inclinazione visiva lieve, proporzionale allo sterzo
-            // (angolo fra muso e direzione del joystick). Il muso segue il
-            // joystick, quindi usiamo lo stesso indicatore del passivo ma
-            // scalato da activeDriftVisualYawScale (default 0.4 = 40% del
-            // passivo). Il kart resta sostanzialmente dritto, niente 'lean'
-            // marcato.
+            // DRIFT ATTIVO: inclinazione visiva basata sullo SLIP ANGLE
+            // (angolo fra muso del kart e velocity), NON sul joystick.
+            // Cosi' quando il corpo e' opposto al joystick (180 gradi) ma la
+            // velocity segue il joystick, la visual yaw riflette la derapata
+            // reale (muso opposto alla velocity = slip 180 gradi = visual yaw
+            // massima). Il kart appare 'in derapata' rispetto alla direzione
+            // di marcia, non 'opposto' come prima.
+            // Fallback al joystick se velocity e' ~0 (fermo).
+            // Lerp piu' veloce (activeDriftVisualLerpSpeed, default 12) per
+            // far tornare la visual yaw a 0 rapidamente dopo un 360: niente
+            // 'rimane inclinato' residuo.
             if (isDriftingActive)
             {
-                if (desiredMoveDirection.sqrMagnitude > 0.001f)
+                Vector3 velXZ = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+                if (velXZ.sqrMagnitude > 0.5f)
                 {
+                    velXZ.Normalize();
+                    Vector3 fwdXZ = Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f));
+                    if (fwdXZ.sqrMagnitude > 0.0001f) fwdXZ.Normalize();
+                    else fwdXZ = transform.forward;
+
+                    float slipAngle = Vector3.SignedAngle(fwdXZ, velXZ, Vector3.up);
+                    float steer = Mathf.Clamp(slipAngle / 90f, -1f, 1f);
+                    targetYaw = steer * driftVisualYawDegrees * activeDriftVisualYawScale;
+                }
+                else if (desiredMoveDirection.sqrMagnitude > 0.001f)
+                {
+                    // Velocity ~0: fallback al joystick (vecchio comportamento).
                     float signedAngle = Vector3.SignedAngle(transform.forward, desiredMoveDirection, Vector3.up);
                     float steer = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
                     targetYaw = steer * driftVisualYawDegrees * activeDriftVisualYawScale;
                 }
+
+                lerpSpeed = activeDriftVisualLerpSpeed;
             }
             else if (IsDrifting && desiredMoveDirection.sqrMagnitude > 0.001f)
             {
@@ -1258,7 +1313,7 @@ private void UpdateSkateRampLaunchState()
             currentDriftYaw = Mathf.Lerp(
                 currentDriftYaw,
                 targetYaw,
-                1f - Mathf.Exp(-driftVisualLerpSpeed * Time.deltaTime)
+                1f - Mathf.Exp(-lerpSpeed * Time.deltaTime)
             );
         }
 
