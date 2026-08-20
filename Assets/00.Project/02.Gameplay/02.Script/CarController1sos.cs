@@ -263,11 +263,10 @@ namespace ArcadeKart.Core
 
         public bool IsDrifting =>
             IsDriftingActive
-            || (input != null
-                && input.Drift
+            || (CurrentDrift
                 && IsGrounded
                 && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
-                && input.Move.sqrMagnitude >= driftMinSteer * driftMinSteer);
+                && CurrentMove.sqrMagnitude >= driftMinSteer * driftMinSteer);
 
         public bool IsDriftingActive => isDriftingActive;
 
@@ -280,6 +279,35 @@ namespace ArcadeKart.Core
 
         public void ApplySlow(float factor, float duration) =>
             StartMultiplier(Mathf.Clamp01(factor), duration);
+
+        public bool ControlsEnabled { get; private set; } = true;
+
+        // Usato dalla UI del menu (vedi MenuControls): quando i controlli si
+        // spengono il kart si freezea all'istante (velocity azzerata) e il
+        // drift attivo viene resettato senza boost gratuito. La fisica
+        // (gravita', sospensione, collisioni) continua a girare.
+        public void SetControlsEnabled(bool value)
+        {
+            if (ControlsEnabled == value)
+                return;
+
+            ControlsEnabled = value;
+
+            if (value || rb == null)
+                return;
+
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            CurrentSpeed = 0f;
+            lastReportedSpeed = 0f;
+            OnSpeedChanged?.Invoke(0f);
+
+            isDriftingActive = false;
+            driftCharge = 0f;
+            driftEntrySpeed = 0f;
+            isDriftCharged = false;
+            pendingCrashExit = false;
+        }
 
         public void Teleport(Vector3 position, Quaternion rotation)
         {
@@ -517,6 +545,19 @@ namespace ArcadeKart.Core
 
         private Rigidbody rb;
         private KartInput input;
+
+        // Gate dei controlli: KartInput cacha i valori letti in Update, quindi
+        // disattivarlo congelerebbe l'ultimo input (W tenuto = accelerazione
+        // eterna). Passiamo invece tutte le letture da questi helper, che
+        // restituiscono valori neutri quando ControlsEnabled e' false.
+        private Vector2 CurrentMove =>
+            (ControlsEnabled && input != null) ? input.Move : Vector2.zero;
+
+        private bool CurrentBrake =>
+            ControlsEnabled && input != null && input.Brake;
+
+        private bool CurrentDrift =>
+            ControlsEnabled && input != null && input.Drift;
         private Coroutine multiplierRoutine;
         private float speedMultiplier = 1f;
         private bool wasGrounded;
@@ -678,7 +719,7 @@ private void UpdateSkateRampLaunchState()
 
         private void UpdateCameraRelativeMoveDirection()
         {
-            Vector2 moveInput = input.Move;
+            Vector2 moveInput = CurrentMove;
             desiredMoveAmount = Mathf.Clamp01(moveInput.magnitude);
 
             if (desiredMoveAmount <= 0.001f)
@@ -725,7 +766,7 @@ private void UpdateSkateRampLaunchState()
             // collassare planarSpeed sotto activeDriftMinSpeed causando false
             // exit. Il crash vero e' gestito da OnImpact (vedi pendingCrashExit),
             // non dalla velocita'.
-            if (isDriftingActive && !input.Brake)
+            if (isDriftingActive && !CurrentBrake)
             {
                 Vector3 pf = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
                 float pm = pf.magnitude;
@@ -750,8 +791,8 @@ private void UpdateSkateRampLaunchState()
             float fwdDot = Vector3.Dot(bodyFwdXZ, planarVel);
             bool goingForward = fwdDot >= 0f;
             float angleToJoystick = Mathf.Abs(currentSignedAngleToDesired);
-            float moveX = (input != null) ? input.Move.x : 0f;
-            bool driftHeld = (input != null) && input.Drift;
+            float moveX = CurrentMove.x;
+            bool driftHeld = CurrentDrift;
             bool wallContact = WallContactActive;
 
             if (isDriftingActive)
@@ -794,7 +835,7 @@ private void UpdateSkateRampLaunchState()
                         // forwardSpeed locale parte bassa (floor) e il solo
                         // multiplier impiega ~0.8s per rendersi visibile.
                         // Skip se Brake (frena comunque).
-                        if (activeDriftBoostKick > 0f && !input.Brake && IsGrounded)
+                        if (activeDriftBoostKick > 0f && !CurrentBrake && IsGrounded)
                         {
                             Vector3 fwd = Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f)).normalized;
                             if (fwd.sqrMagnitude > 0.001f)
@@ -1027,7 +1068,7 @@ private void UpdateSkateRampLaunchState()
             if (!IsGrounded)
                 effectiveTurn *= airControl;
 
-            if (input.Drift && IsGrounded)
+            if (CurrentDrift && IsGrounded)
                 effectiveTurn *= driftSteerBoost;
 
             float steerLossMultiplier = Mathf.Lerp(1f, 1f - shoppingCartSteerLoss, speedRatio);
@@ -1108,7 +1149,7 @@ private void UpdateSkateRampLaunchState()
                 forwardRate = Mathf.Max(forwardRate, movingReorientationBrakeStrength);
             }
 
-            if (input.Brake)
+            if (CurrentBrake)
             {
                 targetForwardSpeed = 0f;
                 forwardRate = brakeStrength;
@@ -1180,7 +1221,7 @@ private void UpdateSkateRampLaunchState()
             //  -Niente 'va di lato' (la velocity raggiunge sempre il muso).
             //  -Niente 'retromarcia' (lo slip non supera 90 gradi).
             //  -Drift feel preservato: a basso slip la velocity segue lentamente.
-            if (isDriftingActive && IsGrounded && !input.Brake)
+            if (isDriftingActive && IsGrounded && !CurrentBrake)
             {
                 Vector3 velXZ = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
                 float velMag = velXZ.magnitude;
@@ -1286,7 +1327,7 @@ private void UpdateSkateRampLaunchState()
             //   spezzano piu' il drift. Il crash vero e' gestito da OnImpact
             //   (pendingCrashExit), non dalla velocita'.
             //  -Il Brake bypassa (frena normalmente).
-            if (isDriftingActive && !input.Brake)
+            if (isDriftingActive && !CurrentBrake)
             {
                 Vector3 planar = new Vector3(finalVelocity.x, 0f, finalVelocity.z);
                 float planarMag = planar.magnitude;
