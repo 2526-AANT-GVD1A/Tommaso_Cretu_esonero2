@@ -133,9 +133,8 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Cap hard (gradi/sec) di quanto il muso puo' ruotare verso il joystick durante il drift attivo. Previene spin istantanei: niente 360 in 0.1 sec anche se il joystick fa cerchi completi. Indipendente dalla sterzata normale (turnRate).")]
         private float activeDriftMaxTurnRate = 150f;
 
-        [SerializeField, Tooltip("Slip angle massimo (gradi, fra muso del kart e velocity) oltre il quale il muso rallenta per dare tempo alla velocity di seguire. Previene il 'girare su se stesso': se il muso ruota piu' veloce di quanto la velocity possa seguire, il kart appare ruotare sul posto. Sotto meta' di questo valore il muso gira liberamente; tra meta' e questo valore rallenta graduariamente; sopra si ferma. Default 90 = slip angle massimo ragionevole per una derapata visibile.")]
-        [Range(45f, 180f)]
-        private float activeDriftMaxSlipAngle = 90f;
+        [SerializeField, Tooltip("Costante di stabilizzazione dello slip (gradi). Controlla quanto lo slip angle (muso vs velocity) deve crescere prima che la velocity acceleri verso il muso. Piu' basso = velocity segue prima (meno derapata, piu' reattivo). Piu' alto = velocity segue dopo (piu' derapata, piu' slittamento). La velocity ruota verso il muso a rate = grip * (1 + slip/K) * 57.3 gradi/sec. Con K=30 e grip=1: a 0 gradi slip = 57 gradi/sec, a 30 gradi = 115 gradi/sec, a 75 gradi = 200 gradi/sec (pari a maxTurnRate=200).")]
+        private float activeDriftSlipStabilizeK = 30f;
 
         [SerializeField, Tooltip("Angolo minimo (gradi) fra muso del kart e direzione del joystick per accumulare carica boost. Sotto questa soglia (es. vai dritto) NON carichi. La carica accumulata resta pero' sticky (non decade): serve a impedire 'charge for free' andando dritto.")]
         private float activeDriftChargeMinAngle = 15f;
@@ -920,33 +919,6 @@ private void UpdateSkateRampLaunchState()
                 float driftDeltaYaw = Mathf.DeltaAngle(currentYaw, targetYaw);
 
                 float driftMaxStep = activeDriftMaxTurnRate * Time.fixedDeltaTime;
-
-                // CAP SULLO SLIP ANGLE: previene il "girare su se stesso".
-                // Se il muso ruota a maxTurnRate ma la velocity non ha tempo
-                // di seguire (grip laterale bassa), lo slip angle (muso vs
-                // velocity) cresce fino a 180 gradi e il kart appare ruotare sul
-                // posto. Limitiamo il muso quando lo slip angle supera una
-                // soglia: sotto meta' della soglia il muso gira liberamente,
-                // tra meta' e soglia rallenta graduariamente, sopra si ferma.
-                // Cosi' il kart "drifta" sempre (slip angle ragionevole), mai
-                // "gira su se stesso" (slip angle = 180).
-                Vector3 velXZ = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-                float slipAngleDeg = 0f;
-                if (velXZ.sqrMagnitude > 0.5f)
-                {
-                    velXZ.Normalize();
-                    slipAngleDeg = Mathf.Abs(Vector3.SignedAngle(driftCurrentFwd, velXZ, Vector3.up));
-                }
-
-                float slipCapFactor = 1f;
-                float softSlip = activeDriftMaxSlipAngle * 0.5f;
-                if (slipAngleDeg > softSlip)
-                {
-                    float t = Mathf.Clamp01((slipAngleDeg - softSlip) / (activeDriftMaxSlipAngle - softSlip));
-                    slipCapFactor = 1f - t;
-                }
-
-                driftMaxStep *= slipCapFactor;
                 float driftAppliedYaw = Mathf.Clamp(driftDeltaYaw, -driftMaxStep, driftMaxStep);
                 transform.Rotate(0f, driftAppliedYaw, 0f, Space.World);
 
@@ -1194,10 +1166,89 @@ private void UpdateSkateRampLaunchState()
 
             verticalSpeed -= gravity * Time.fixedDeltaTime;
 
-            Vector3 finalVelocity =
-                transform.right * lateralSpeed +
-                transform.forward * forwardSpeed +
-                Vector3.up * verticalSpeed;
+            Vector3 finalVelocity;
+
+            // Durante drift attivo: ROTAZIONE MONDIALE SELF-STABILIZING.
+            // Invece di ricostruire la velocity da componenti locali (forward +
+            // lateral) che e' intrinsecamente lenta a seguire il muso, ruotiamo
+            // direttamente la velocity mondiale verso il forward del muso con
+            // un rate che CRESCE con lo slip angle (auto-stabilizzante):
+            //  -Piu' lo slip e' grande, piu' la velocity accelera verso il muso.
+            //  -Lo slip non puo mai superare 90 gradi: quando |slip| > 90, la
+            //   rotazione si limita a ridurre lo slip a 90 gradi (non a 0 = non
+            //   retromarcia, non oltre 90 = niente tremare).
+            //  -Niente 'va di lato' (la velocity raggiunge sempre il muso).
+            //  -Niente 'retromarcia' (lo slip non supera 90 gradi).
+            //  -Drift feel preservato: a basso slip la velocity segue lentamente.
+            if (isDriftingActive && IsGrounded && !input.Brake)
+            {
+                Vector3 velXZ = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+                float velMag = velXZ.magnitude;
+
+                if (velMag > 0.01f)
+                {
+                    Vector3 velDir = velXZ / velMag;
+                    Vector3 fwdXZ = Vector3.Scale(transform.forward, new Vector3(1f, 0f, 1f));
+                    if (fwdXZ.sqrMagnitude > 0.0001f) fwdXZ.Normalize();
+                    else fwdXZ = transform.forward;
+
+                    float slipSigned = Vector3.SignedAngle(fwdXZ, velDir, Vector3.up);
+                    float slipDeg = Mathf.Abs(slipSigned);
+
+                    // Rate self-stabilizing: cresce con lo slip angle.
+                    // K (activeDriftSlipStabilizeK) controlla quanto slip prima
+                    // che la velocity acceleri. K=30: a 30 gradi il rate raddoppia.
+                    float rotRate = activeDriftLateralFriction
+                        * (1f + slipDeg / activeDriftSlipStabilizeK)
+                        * Mathf.Rad2Deg
+                        * Time.fixedDeltaTime;
+
+                    // Segno: rotAmount = -slipSigned ruota la velocity VERSO il muso
+                    // (non lontano). Il segno di slipSigned e' l'angolo da muso a
+                    // velocity: positivo significa velocity e' a +X (CCW) dal muso,
+                    // per allinearla al muso dobbiamo ruotarla di -slipSigned.
+                    // Cap |slip| <= 90: full follow (riduci a 0, ma non cross 0).
+                    // Cap |slip| > 90: riduci a 90 (non a 0 = non retromarcia, non oltre 90).
+                    float rotAmount;
+                    if (slipDeg <= 90f)
+                    {
+                        rotAmount = -Mathf.Sign(slipSigned) * Mathf.Min(rotRate, slipDeg);
+                    }
+                    else
+                    {
+                        // Slip estremo: riduci a 90 gradi, non a 0 (evita retromarcia).
+                        // maxRot = quanto possiamo ruotare per portare |slip| a 90.
+                        float maxRotTo90 = Mathf.Max(0f, slipDeg - 90f);
+                        rotAmount = -Mathf.Sign(slipSigned) * Mathf.Min(rotRate, maxRotTo90);
+                    }
+
+                    Vector3 newDir = Quaternion.Euler(0f, rotAmount, 0f) * velDir;
+
+                    // Mantieni la magnitudine (forwardSpeed come target, floor applicato dopo)
+                    float targetMag = Mathf.Max(velMag, forwardSpeed);
+                    finalVelocity = new Vector3(
+                        newDir.x * targetMag,
+                        verticalSpeed,
+                        newDir.z * targetMag
+                    );
+                }
+                else
+                {
+                    // Velocity ~0: fallback al modello originale
+                    finalVelocity =
+                        transform.right * lateralSpeed +
+                        transform.forward * forwardSpeed +
+                        Vector3.up * verticalSpeed;
+                }
+            }
+            else
+            {
+                // Non-drift o brake o air: modello originale (lateral damping)
+                finalVelocity =
+                    transform.right * lateralSpeed +
+                    transform.forward * forwardSpeed +
+                    Vector3.up * verticalSpeed;
+            }
 
             Vector3 planarFinal = finalVelocity;
             planarFinal.y = 0f;
