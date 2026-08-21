@@ -7573,16 +7573,16 @@ MonoBehaviour:
   - phaseId: ASC
     offset: {x: 0, y: 1, z: -3}
     followTargetRotation: 0
-    followX: 1
-    followY: 1
-    followZ: 1
-    fixedX: 0
-    fixedY: 5
-    fixedZ: 0
+    followX: 0
+    followY: 0
+    followZ: 0
+    fixedX: -3.21
+    fixedY: 4.43
+    fixedZ: -3.21
     lookAtOffset: {x: 0, y: 1, z: 0}
     useLookAtTarget: 0
-    fixedEulerAngles: {x: 0, y: 0, z: 0}
-    fieldOfView: 90
+    fixedEulerAngles: {x: 51.8, y: 46.5, z: 0}
+    fieldOfView: 65.8
     followDamping: 5
     lookDamping: 8
     fovDamping: 6
