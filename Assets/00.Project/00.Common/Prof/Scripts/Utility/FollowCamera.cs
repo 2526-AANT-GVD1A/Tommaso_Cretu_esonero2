@@ -6,6 +6,14 @@ namespace ArcadeKart.Utility
 {
     public class PhasedFollowCamera : MonoBehaviour
     {
+        // Come passa alla nuova fase quando viene richiamata:
+        // Smooth = transizione fluida col damping, Snap = salto immediato.
+        public enum TransitionMode
+        {
+            Smooth,
+            Snap
+        }
+
         [Serializable]
         public class CameraPhase
         {
@@ -95,6 +103,11 @@ namespace ArcadeKart.Utility
 
         public bool SetPhase(string phaseId)
         {
+            return SetPhase(phaseId, TransitionMode.Smooth);
+        }
+
+        public bool SetPhase(string phaseId, TransitionMode mode)
+        {
             if (string.IsNullOrWhiteSpace(phaseId))
                 return false;
 
@@ -106,6 +119,12 @@ namespace ArcadeKart.Utility
             }
 
             currentPhase = found;
+
+            // Snap: porta subito la camera ai parametri della nuova fase,
+            // bypassando il damping (che continuera' da qui in lockstep).
+            if (mode == TransitionMode.Snap)
+                SnapToCurrentPhase();
+
             return true;
         }
 
@@ -164,13 +183,7 @@ namespace ArcadeKart.Utility
             if (currentPhase == null)
                 return;
 
-            Vector3 desiredPos = currentPhase.followTargetRotation
-                ? target.TransformPoint(currentPhase.offset)
-                : target.position + currentPhase.offset;
-
-            if (!currentPhase.followX) desiredPos.x = currentPhase.fixedX;
-            if (!currentPhase.followY) desiredPos.y = currentPhase.fixedY;
-            if (!currentPhase.followZ) desiredPos.z = currentPhase.fixedZ;
+            Vector3 desiredPos = ComputeDesiredPosition(currentPhase);
 
             float posT = 1f - Mathf.Exp(-Mathf.Max(0.01f, currentPhase.followDamping) * Time.deltaTime);
             transform.position = Vector3.Lerp(transform.position, desiredPos, posT);
@@ -203,6 +216,34 @@ namespace ArcadeKart.Utility
             }
 
             return null;
+        }
+
+        private Vector3 ComputeDesiredPosition(CameraPhase phase)
+        {
+            Vector3 desiredPos = phase.followTargetRotation
+                ? target.TransformPoint(phase.offset)
+                : target.position + phase.offset;
+
+            if (!phase.followX) desiredPos.x = phase.fixedX;
+            if (!phase.followY) desiredPos.y = phase.fixedY;
+            if (!phase.followZ) desiredPos.z = phase.fixedZ;
+
+            return desiredPos;
+        }
+
+        // Teletrasporta subito camera e FOV sui valori della fase corrente.
+        // Prima la posizione, poi la rotazione: la look-at dipende dalla
+        // posizione appena applicata, quindi l'ordine conta.
+        private void SnapToCurrentPhase()
+        {
+            if (currentPhase == null || target == null)
+                return;
+
+            transform.position = ComputeDesiredPosition(currentPhase);
+            transform.rotation = GetDesiredRotation(currentPhase);
+
+            if (cam != null)
+                cam.fieldOfView = currentPhase.fieldOfView;
         }
 
         private Quaternion GetDesiredRotation(CameraPhase phase)

@@ -5,9 +5,19 @@ namespace ArcadeKart.Utility
 {
     public class CameraPhaseTrigger : MonoBehaviour
     {
-        [Header("Phase")]
+        [Header("Phase - Ingresso")]
         [SerializeField, Tooltip("ID della fase da attivare quando il kart entra nel trigger.")]
         private string phaseId = "Default";
+
+        [SerializeField, Tooltip("Smooth = transizione fluida col damping. Snap = salto immediato sulla nuova inquadratura.")]
+        private PhasedFollowCamera.TransitionMode transitionMode = PhasedFollowCamera.TransitionMode.Smooth;
+
+        [Header("Phase - Uscita")]
+        [SerializeField, Tooltip("ID della fase da attivare quando il kart esce dal trigger. Vuoto = all'uscita non cambia la fase.")]
+        private string exitPhaseId = "";
+
+        [SerializeField, Tooltip("Smooth = transizione fluida col damping. Snap = salto immediato sulla nuova inquadratura.")]
+        private PhasedFollowCamera.TransitionMode exitTransitionMode = PhasedFollowCamera.TransitionMode.Smooth;
 
         [Header("Filtering")]
         [SerializeField, Tooltip("Se assegnato, il trigger reagisce solo a questo tag. Consigliato: Player.")]
@@ -55,11 +65,36 @@ namespace ArcadeKart.Utility
                 return;
             }
 
-            bool changed = targetCamera.SetPhase(phaseId);
+            bool changed = targetCamera.SetPhase(phaseId, transitionMode);
             if (!changed)
                 return;
 
             ApplyToggleState();
+
+            if (oneShot)
+                used = true;
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (used && oneShot)
+                return;
+
+            if (!string.IsNullOrEmpty(requiredTag) && !other.CompareTag(requiredTag))
+                return;
+
+            if (string.IsNullOrEmpty(exitPhaseId))
+                return;
+
+            if (targetCamera == null)
+            {
+                Debug.LogWarning("[CameraPhaseTrigger] Nessuna PhasedFollowCamera trovata.", this);
+                return;
+            }
+
+            bool changed = targetCamera.SetPhase(exitPhaseId, exitTransitionMode);
+            if (!changed)
+                return;
 
             if (oneShot)
                 used = true;

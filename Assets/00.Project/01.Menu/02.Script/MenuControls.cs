@@ -1,5 +1,6 @@
 using UnityEngine;
 using ArcadeKart.Core;
+using ArcadeKart.Gameplay;
 
 namespace ArcadeKart.Menu
 {
@@ -42,6 +43,18 @@ namespace ArcadeKart.Menu
             }
 
             kart.SetControlsEnabled(false);
+
+            // Ogni volta che il menu torna attivo la partita "ricomincia":
+            // azzeriamo il contatore totale degli oggetti raccolti e
+            // svuotiamo anche la torre visibile sul kart (il kart NON viene
+            // distrutto, e' solo respawnato da LevelManager, quindi senza
+            // questo reset la vecchia pila resterebbe in spalla al rientro).
+            KartCollectedStack stack = kart.GetComponent<KartCollectedStack>();
+            if (stack != null)
+            {
+                stack.ResetTotal();
+                stack.ClearAll();
+            }
         }
 
         private void OnDisable()

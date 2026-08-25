@@ -112,7 +112,7 @@ namespace ArcadeKart.Gameplay
             }
 
             if (cameraFasi != null)
-                cameraFasi.SetPhase(faseCameraDefault);
+                cameraFasi.SetPhase(faseCameraDefault, PhasedFollowCamera.TransitionMode.Snap);
 
             if (oggettoMenu != null)
                 oggettoMenu.SetActive(true);
