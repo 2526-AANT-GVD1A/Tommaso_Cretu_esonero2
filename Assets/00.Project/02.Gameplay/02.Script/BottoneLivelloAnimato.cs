@@ -5,6 +5,15 @@ using UnityEngine.UI;
 
 namespace ArcadeKart.Gameplay
 {
+    // Cosa fa il bottone al termine dell'animazione di uscita.
+    public enum AzioneBottone
+    {
+        // Carica il livello all'indice scelto (bottoni del menu d'inizio).
+        CaricaLivello = 0,
+        // Torna al menu d'inizio (bottone del menu di fine livello).
+        TornaAlMenu = 1
+    }
+
     // Abbellimento del bottone del menu: si ingrandisce leggermente quando il
     // mouse passa sopra e, al click, saltella su e giu per un secondo prima di
     // scivolare fuori dallo schermo verso destra; solo allora carica il livello
@@ -21,8 +30,11 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Oggetto del menu da disattivare dopo l'animazione.")]
         private GameObject oggettoMenu;
 
-        [SerializeField, Tooltip("Indice del livello da caricare (come nella lista del LevelManager).")]
+        [SerializeField, Tooltip("Indice del livello da caricare (usato solo se azione = CaricaLivello).")]
         private int indiceLivello;
+
+        [SerializeField, Tooltip("Cosa fare dopo l'animazione: CaricaLivello (menu d'inizio) o TornaAlMenu (menu di fine).")]
+        private AzioneBottone azione = AzioneBottone.CaricaLivello;
 
         [Header("Ingrandimento al passaggio del mouse")]
         [SerializeField, Tooltip("Scala raggiunta quando il mouse e' sopra il bottone.")]
@@ -188,14 +200,32 @@ namespace ArcadeKart.Gameplay
             }
             yield return StartCoroutine(UscitaDalSchermo());
 
-            // 3) Solo ora fa quello che doveva fare: carica il livello e chiude il menu.
-            if (levelManager != null)
-                levelManager.CaricaLivello(indiceLivello);
-            else
-                Debug.LogWarning("[BottoneLivelloAnimato] LevelManager non assegnato.", this);
+            // 3) Solo ora fa quello che doveva fare.
+            if (azione == AzioneBottone.TornaAlMenu)
+            {
+                // Menu di fine -> menu d'inizio. Importante l'ordine: prima
+                // chiude il proprio menu (il suo MenuControls.OnDisable
+                // riaccende i controlli del kart), POI TornaAlMenu riapre
+                // Menu_Inizio il cui MenuControls.OnEnable li rispegne. Ordine
+                // inverso lascerebbe i controlli accenti col menu aperto.
+                if (oggettoMenu != null)
+                    oggettoMenu.SetActive(false);
 
-            if (oggettoMenu != null)
-                oggettoMenu.SetActive(false);
+                if (levelManager != null)
+                    levelManager.TornaAlMenu();
+                else
+                    Debug.LogWarning("[BottoneLivelloAnimato] LevelManager non assegnato.", this);
+            }
+            else
+            {
+                if (levelManager != null)
+                    levelManager.CaricaLivello(indiceLivello);
+                else
+                    Debug.LogWarning("[BottoneLivelloAnimato] LevelManager non assegnato.", this);
+
+                if (oggettoMenu != null)
+                    oggettoMenu.SetActive(false);
+            }
         }
     }
 }

@@ -18,6 +18,10 @@ namespace ArcadeKart.Menu
         [SerializeField, Tooltip("KartController del giocatore. Se vuoto, cerca il primo oggetto col tag Player.")]
         private KartController kart;
 
+        [Header("Comportamento")]
+        [SerializeField, Tooltip("Se true, all'apertura del menu azzera il contatore totale e svuota la torre sul kart. Usato dal menu d'inizio (la partita ricomincia); il menu di FINE livello lo tiene a false per mostrare il punteggio.")]
+        private bool azzeraPunteggio = true;
+
         private bool savedCursorVisible;
         private CursorLockMode savedCursorLockMode;
 
@@ -44,11 +48,13 @@ namespace ArcadeKart.Menu
 
             kart.SetControlsEnabled(false);
 
-            // Ogni volta che il menu torna attivo la partita "ricomincia":
-            // azzeriamo il contatore totale degli oggetti raccolti e
-            // svuotiamo anche la torre visibile sul kart (il kart NON viene
-            // distrutto, e' solo respawnato da LevelManager, quindi senza
-            // questo reset la vecchia pila resterebbe in spalla al rientro).
+            // Azzera punteggio e torre solo se richiesto (menu d'inizio: la
+            // partita ricomincia; menu di fine: il punteggio va mantenuto
+            // visibile finche' il giocatore non torna al menu, dove a
+            // resettare e' LevelManager.TornaAlMenu).
+            if (!azzeraPunteggio)
+                return;
+
             KartCollectedStack stack = kart.GetComponent<KartCollectedStack>();
             if (stack != null)
             {

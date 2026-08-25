@@ -38,6 +38,9 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Oggetto del menu da riaprire al ritorno (tasto Esc).")]
         private GameObject oggettoMenu;
 
+        [SerializeField, Tooltip("Oggetto del menu di FINE livello da attivare quando il kart tocca il trigger di fine.")]
+        private GameObject oggettoMenuFine;
+
         [SerializeField, Tooltip("Transform del punto di spawn sulla piattaforma.")]
         private Transform puntoSpawn;
 
@@ -50,6 +53,13 @@ namespace ArcadeKart.Gameplay
         public int LivelloCorrente { get; private set; } = -1;
 
         public IReadOnlyList<VoceLivello> Livelli => livelli;
+
+        // True quando il kart ha toccato il trigger di fine livello e il
+        // Menu_Fine e' aperto. Serve anche a bloccare il tasto Esc finche'
+        // il giocatore non decide se tornare al menu (altrimenti Esc aprirebbe
+        // Menu_Inizio sotto Menu_Fine, con i due menu sovrapposti e un bug sui
+        // controlli del kart).
+        private bool partitaFinita;
 
         private void Awake()
         {
@@ -69,7 +79,7 @@ namespace ArcadeKart.Gameplay
             if (Keyboard.current == null)
                 return;
 
-            if (Keyboard.current.escapeKey.wasPressedThisFrame && LivelloCorrente >= 0)
+            if (Keyboard.current.escapeKey.wasPressedThisFrame && LivelloCorrente >= 0 && !partitaFinita)
                 TornaAlMenu();
         }
 
@@ -107,6 +117,27 @@ namespace ArcadeKart.Gameplay
             LivelloCorrente = indice;
         }
 
+        // Chiamato dal TriggerFineLivello quando il kart arriva in fondo al
+        // livello. Attiva il Menu_Fine: il suo MenuControls spenge i controlli
+        // del kart (freeze), libera il cursore e mostra il punteggio. Il
+        // livello resta caricato finche' il giocatore non preme il bottone per
+        // tornare al menu (che chiama TornaAlMenu). Idempotente: se chiamato
+        // piu' volte o senza un livello in corso, non fa nulla.
+        public void TerminaLivello()
+        {
+            if (partitaFinita || LivelloCorrente < 0)
+                return;
+
+            if (oggettoMenuFine == null)
+            {
+                Debug.LogWarning("[LevelManager] oggettoMenuFine non assegnato: impossibile aprire il menu di fine.", this);
+                return;
+            }
+
+            partitaFinita = true;
+            oggettoMenuFine.SetActive(true);
+        }
+
         // Riattiva ogni Pickup inattivo sotto la radice (inclusi i figli
         // disattivati, grazie a GetComponentsInChildren(true)).
         private static void ReenablePickups(GameObject root)
@@ -124,6 +155,15 @@ namespace ArcadeKart.Gameplay
 
         public void TornaAlMenu()
         {
+            // La partita non e' piu' "finita" e il Menu_Fine si chiude. Va
+            // fatto PRIMA di attivare Menu_Inizio (alla fine del metodo),
+            // cosi' l'OnDisable di Menu_Fine (che riaccende i controlli del
+            // kart) gira prima dell'OnEnable di Menu_Inizio (che li rispegne):
+            // ordine inverso lascerebbe i controlli accesi col menu aperto.
+            partitaFinita = false;
+            if (oggettoMenuFine != null && oggettoMenuFine.activeSelf)
+                oggettoMenuFine.SetActive(false);
+
             if (LivelloCorrente >= 0 && LivelloCorrente < livelli.Count)
             {
                 GameObject corrente = livelli[LivelloCorrente].radice;
