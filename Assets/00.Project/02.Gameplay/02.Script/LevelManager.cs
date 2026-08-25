@@ -32,6 +32,9 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("KartController del giocatore. Se vuoto, cerca il primo oggetto col tag Player.")]
         private KartController kart;
 
+        [SerializeField, Tooltip("KartCollectedStack del giocatore (torre degli oggetti raccolti). Se vuoto, lo cerca sul kart in Awake.")]
+        private KartCollectedStack stack;
+
         [SerializeField, Tooltip("Oggetto del menu da riaprire al ritorno (tasto Esc).")]
         private GameObject oggettoMenu;
 
@@ -56,6 +59,9 @@ namespace ArcadeKart.Gameplay
                 if (player != null)
                     kart = player.GetComponent<KartController>();
             }
+
+            if (stack == null && kart != null)
+                stack = kart.GetComponentInChildren<KartCollectedStack>();
         }
 
         private void Update()
@@ -89,7 +95,31 @@ namespace ArcadeKart.Gameplay
             }
 
             livelli[indice].radice.SetActive(true);
+
+            // Riattiva tutti i Pickup figli della radice: quelli raccolti in
+            // una sessione precedente si sono disattivati da soli con
+            // SetActive(false), e riattivare il genitore NON ribalta l'active
+            // dei figli (Unity). OnDisable del Pickup ha gia' ripristinato lo
+            // stato interno (transform, collider, collected), quindi basta
+            // riattivarli per renderli di nuovo raccoglibili.
+            ReenablePickups(livelli[indice].radice);
+
             LivelloCorrente = indice;
+        }
+
+        // Riattiva ogni Pickup inattivo sotto la radice (inclusi i figli
+        // disattivati, grazie a GetComponentsInChildren(true)).
+        private static void ReenablePickups(GameObject root)
+        {
+            if (root == null)
+                return;
+
+            Pickup[] pickups = root.GetComponentsInChildren<Pickup>(true);
+            for (int i = 0; i < pickups.Length; i++)
+            {
+                if (pickups[i] != null && !pickups[i].gameObject.activeSelf)
+                    pickups[i].gameObject.SetActive(true);
+            }
         }
 
         public void TornaAlMenu()
@@ -101,6 +131,18 @@ namespace ArcadeKart.Gameplay
                     corrente.SetActive(false);
             }
             LivelloCorrente = -1;
+
+            // Svuota la torre e azzera il contatore: i pickup respawnano a
+            // ogni riattivazione del livello, quindi senza questo reset il
+            // giocatore accumulerebbe punteggio all'infinito riraccogliendo
+            // gli stessi oggetti. Va fatto prima di muovere il kart con
+            // RespawnAt, cosi' eventuali logiche visive della torre non
+            // lampeggiano durante il teleport.
+            if (stack != null)
+            {
+                stack.ClearAll();
+                stack.ResetTotal();
+            }
 
             if (kart != null && puntoSpawn != null)
             {

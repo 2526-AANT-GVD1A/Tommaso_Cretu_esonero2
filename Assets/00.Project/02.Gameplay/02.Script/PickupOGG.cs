@@ -33,6 +33,19 @@ namespace ArcadeKart.Gameplay
         private Collider cachedCollider;
         private Rigidbody cachedRb;
 
+        // Stato iniziale salvato per il respawn: il pickup viene disattivato
+        // anziche' distrutto alla raccolta, e ripristinato quando la radice
+        // del livello (genitore) viene riattivata. Salviamo lo stato locale
+        // in Awake cosi' OnDisable puo' rimettere l'oggetto esattamente come
+        // era al primo avvio, pronto per essere raccolto di nuovo.
+        private Vector3 initialLocalPos;
+        private Quaternion initialLocalRot;
+        private Vector3 initialLocalScale;
+        private bool initialColliderEnabled;
+        private bool initialRbIsKinematic;
+        private bool initialRbDetectCollisions;
+        private bool hasInitialRbState;
+
         private void Awake()
         {
             cachedCollider = GetComponent<Collider>();
@@ -40,6 +53,48 @@ namespace ArcadeKart.Gameplay
 
             if (cachedCollider != null && !cachedCollider.isTrigger)
                 cachedCollider.isTrigger = true;
+
+            initialLocalPos = transform.localPosition;
+            initialLocalRot = transform.localRotation;
+            initialLocalScale = transform.localScale;
+
+            if (cachedCollider != null)
+                initialColliderEnabled = cachedCollider.enabled;
+
+            if (cachedRb != null)
+            {
+                initialRbIsKinematic = cachedRb.isKinematic;
+                initialRbDetectCollisions = cachedRb.detectCollisions;
+                hasInitialRbState = true;
+            }
+        }
+
+        // Chiamato sia quando la raccolta finisce (SetActive(false) finale
+        // della coroutine) sia quando il livello genitore viene disattivato
+        // (TornaAlMenu, eventualmente a meta' di un volo in corso). In ogni
+        // caso riportiamo il pickup allo stato iniziale: cosi' alla
+        // riattivazione della radice del livello e' di nuovo al suo posto,
+        // con collider attivo e non collected, raccoglibile da zero.
+        private void OnDisable()
+        {
+            StopAllCoroutines();
+
+            collected = false;
+
+            transform.localPosition = initialLocalPos;
+            transform.localRotation = initialLocalRot;
+            transform.localScale = initialLocalScale;
+
+            if (cachedCollider != null)
+                cachedCollider.enabled = initialColliderEnabled;
+
+            if (cachedRb != null && hasInitialRbState)
+            {
+                cachedRb.linearVelocity = Vector3.zero;
+                cachedRb.angularVelocity = Vector3.zero;
+                cachedRb.isKinematic = initialRbIsKinematic;
+                cachedRb.detectCollisions = initialRbDetectCollisions;
+            }
         }
 
         private void OnTriggerEnter(Collider other)
@@ -115,7 +170,13 @@ namespace ArcadeKart.Gameplay
             }
 
             stack.AddCollectedItem(visualType);
-            Destroy(gameObject);
+
+            // Disattiviamo invece di distruggere: quando la radice del livello
+            // verra' riattivata (CaricaLivello dopo un TornaAlMenu), OnDisable
+            // avra' gia' ripristinato lo stato iniziale e il pickup sara' di
+            // nuovo raccoglibile. SetActive(false) chiama OnDisable che fa il
+            // reset, quindi qui non serve ripetere la logica di ripristino.
+            gameObject.SetActive(false);
         }
     }
 }
