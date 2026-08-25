@@ -3,8 +3,8 @@
 // -----------------------------------------------------------------------------
 // COSA FA:
 //   Accende e spegne le "sgommate" del kart: una serie di TrailRenderer (segni
-//   neri sull'asfalto) e, opzionalmente, ParticleSystem (fumo bianco) che
-//   restano attivi finche' il KartController dice di stare driftando.
+//   neri sull'asfalto) che seguono IsDrifting, e ParticleSystem (fumo bianco)
+//   che si attivano solo a boost completamente carico (IsDriftCharged).
 // COME SI USA:
 //   1) Aggiungi questo componente da qualche parte sotto il kart (es. su un
 //      figlio "VFX"). 2) Trascina il KartController nello slot "Controller"
@@ -18,6 +18,8 @@
 //     nell'Inspector: ci pensa questo script ad accenderli quando serve.
 //   - I ParticleSystem vanno lasciati in "Play On Awake = true" ma con il
 //     modulo Emission disattivato all'inizio (lo script lo riattiva al volo).
+//     Il fumo si accende SOLO quando la carica del drift attivo e' completa
+//     (IsDriftCharged true), non durante tutto il drift.
 // =============================================================================
 
 using ArcadeKart.Core;
@@ -55,47 +57,52 @@ namespace ArcadeKart.Utility
             if (controller == null)
                 Debug.LogWarning("[KartSkidmarks] Nessun KartController trovato: la sgommata non si attivera'.", this);
 
-            // Stato iniziale "spento": evita un frame di sgommata fantasma all'avvio della scena.
-            ApplyState(false);
+            ApplyTrails(false);
+            ApplySmoke(false);
         }
 
         private void LateUpdate()
         {
-            // LateUpdate: il controller aggiorna IsDrifting in FixedUpdate, qui leggiamo lo stato gia' stabile.
             if (controller == null) return;
-            ApplyState(controller.IsDrifting);
+            ApplyTrails(controller.IsDrifting);
+            ApplySmoke(controller.IsDriftCharged);
         }
 
         #endregion
 
         #region Internal
 
-        private bool lastState;
-        private bool stateInitialized;
+        private bool lastTrailState;
+        private bool trailsInitialized;
 
-        private void ApplyState(bool drifting)
+        private bool lastSmokeState;
+        private bool smokeInitialized;
+
+        private void ApplyTrails(bool drifting)
         {
-            // Cambiamo i renderer solo quando lo stato cambia: niente write inutili ogni frame.
-            if (stateInitialized && drifting == lastState) return;
-            stateInitialized = true;
-            lastState = drifting;
+            if (trailsInitialized && drifting == lastTrailState) return;
+            trailsInitialized = true;
+            lastTrailState = drifting;
 
-            if (trails != null)
+            if (trails == null) return;
+            for (int i = 0; i < trails.Length; i++)
             {
-                for (int i = 0; i < trails.Length; i++)
-                {
-                    if (trails[i] != null) trails[i].emitting = drifting;
-                }
+                if (trails[i] != null) trails[i].emitting = drifting;
             }
+        }
 
-            if (smoke != null)
+        private void ApplySmoke(bool charged)
+        {
+            if (smokeInitialized && charged == lastSmokeState) return;
+            smokeInitialized = true;
+            lastSmokeState = charged;
+
+            if (smoke == null) return;
+            for (int i = 0; i < smoke.Length; i++)
             {
-                for (int i = 0; i < smoke.Length; i++)
-                {
-                    if (smoke[i] == null) continue;
-                    var em = smoke[i].emission;
-                    em.enabled = drifting;
-                }
+                if (smoke[i] == null) continue;
+                var em = smoke[i].emission;
+                em.enabled = charged;
             }
         }
 
