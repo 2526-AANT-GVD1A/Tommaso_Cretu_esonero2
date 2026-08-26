@@ -20,14 +20,19 @@ namespace ArcadeKart.Gameplay
     //     del giocatore.
     //   - Al contatto fisico kart-kart (OnCollisionEnter con il Player), il
     //     giocatore perde gli ultimi N oggetti raccolti (RemoveLastItems).
-    //   - Il NPC e' sempre CONFINATO nel territorio: sterza verso il centro
-    //     quando si avvicina al bordo (soft bias). A riposo (giocatore non
-    //     rilevato) vaga (wander) dentro i bounds.
+    //   - Il NPC e' sempre CONFINATO nel territorio: sterza/frena verso il
+    //     centro vicino al bordo (soft layer) + hard clamp di sicurezza in
+    //     FixedUpdate (paraurti: il kart non esce MAI visibilmente). A riposo
+    //     (giocatore non rilevato) vaga (wander) dentro i bounds.
     //
     // Il KartController, in modalita' AI (vedi KartController.AiSteeringMode,
     // attivata qui in Awake), sterza SEMPRE gradualmente verso la direzione
     // desiderata: niente snap di inversione ne' gating "ruota-prima-di-
     // muoverti", cosi' il NPC "sterza costantemente" come richiesto.
+    // DefaultExecutionOrder(100): il FixedUpdate di EnemyKart (hard clamp)
+    // gira DOPO quello del KartController (ordine 0), che setta la velocity:
+    // cosi' clampo posizione/velocity appena calcolate, non quelle vecchie.
+    [DefaultExecutionOrder(100)]
     [RequireComponent(typeof(KartController))]
     public class EnemyKart : MonoBehaviour, IKartInput
     {
@@ -64,8 +69,15 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Raggio di arrivo del punto wander: sotto questa distanza il NPC ne sceglie un altro.")]
         private float wanderArrivalRadius = 1.5f;
 
-        [SerializeField, Tooltip("Margine dal bordo del territorio: sotto questa distanza il NPC inizia a sterzare verso il centro (contenimento soft).")]
-        private float edgeMargin = 2f;
+        [SerializeField, Tooltip("Margine dal bordo del territorio: sotto questa distanza il NPC frena e sterza verso il centro (contenimento soft). Deve essere >= alla distanza di frenata a maxSpeed (con maxSpeed 10 e brake 18 servono ~2.8m; 4 lascia margine). L'hard clamp di sicurezza in FixedUpdate e' comunque l'ultimo argine.")]
+        private float edgeMargin = 4f;
+
+        [SerializeField, Tooltip("Tempo massimo (sec) per raggiungere un punto wander: se scade, il NPC ne pesca subito un altro. Copre target irraggiungibili (dietro un muro) e stalli contro geometria ('si incastra').")]
+        private float wanderTimeout = 10f;
+
+        [Header("Failsafe")]
+        [SerializeField, Tooltip("Se il kart scende sotto questo dislivello rispetto al centro del territorio (es. cade in un buco), viene teletrasportato al centro del territorio con velocity azzerata. Previene il NPC perso sotto la mappa.")]
+        private float fallFailsafeDepth = 10f;
 
         #endregion
 
@@ -89,6 +101,7 @@ namespace ArcadeKart.Gameplay
         #region Internal
 
         private KartController kart;
+        private Rigidbody rb;
         private Transform myTransform;
 
         // Riferimenti al giocatore (trovati via tag "Player", come fa il
@@ -103,6 +116,9 @@ namespace ArcadeKart.Gameplay
 
         // Punto wander corrente (null = da rigenerare).
         private Vector3? wanderTarget;
+        // Time.time in cui e' stato scelto l'attuale wanderTarget. Usato per
+        // il wanderTimeout: se scade senza averlo raggiunto, viene scartato.
+        private float wanderTargetTime;
 
         #endregion
 
@@ -111,6 +127,7 @@ namespace ArcadeKart.Gameplay
         private void Awake()
         {
             kart = GetComponent<KartController>();
+            rb = GetComponent<Rigidbody>();
             myTransform = transform;
 
             // Attiva la sterzata costante sul KartController: niente snap,
@@ -146,6 +163,12 @@ namespace ArcadeKart.Gameplay
             }
 
             CachePlayerIfNeeded();
+
+            // Reset dei flag input: il contenimento qui sotto puo' mettere
+            // brake=true; se non lo facciamo, un brake=true di un frame
+            // precedente resterebbe "appeso" (stale) nei frame successivi.
+            brake = false;
+            drift = false;
 
             // --- Rilevamento ---
             bool playerInRange = territoryZone != null && territoryZone.PlayerInside;
@@ -195,6 +218,18 @@ namespace ArcadeKart.Gameplay
                 toTarget.y = 0f;
                 float dist = toTarget.magnitude;
 
+                // Timeout: se non lo raggiungo in tempo (target irraggiungibile
+                // tipo dietro un muro, oppure incastrato contro geometria), lo
+                // scarto e al prossimo frame ne pesco un altro.
+                if (wanderTimeout > 0f && (Time.time - wanderTargetTime) > wanderTimeout)
+                {
+                    wanderTarget = null;
+                    move = Vector2.zero;
+                    brake = false;
+                    drift = false;
+                    return;
+                }
+
                 if (dist <= wanderArrivalRadius)
                 {
                     // Arrivato: rigenera al prossimo frame e per stavolta
@@ -213,21 +248,105 @@ namespace ArcadeKart.Gameplay
                 magnitude = driveMagnitude * Mathf.Clamp01((dist - wanderArrivalRadius) / slowRange);
             }
 
-            if (magnitude <= 0.001f || desiredDirXZ.sqrMagnitude <= 0.0001f)
+            // --- Contenimento (soft layer) ---
+            // L'hard clamp di sicurezza e' in FixedUpdate; qui facciamo la
+            // parte "soft" per movimento naturale: quando il kart punta fuori
+            // o e' fuori, FRENA (brake=true, brakeStrength 18 del
+            // KartController) + sterza verso il centro. Frenare e' essenziale:
+            // abbassare solo il throttle forward non killa il momentum (il
+            // kart scivola fuori per lo slip). Tenere un finalMag minimo (0.3)
+            // anche in frenata perche' con Move nullo il KartController non
+            // sterza (desiredMoveAmount <= 0.001 -> no steering): il minimo
+            // serve solo a dare una direzione allo sterzo, il brake comanda la
+            // velocita' verso 0.
+            Vector3 finalDir = desiredDirXZ;
+            float finalMag = magnitude;
+
+            if (territoryZone != null)
             {
-                move = Vector2.zero;
-                brake = false;
-                drift = false;
-                return;
+                Bounds b = territoryZone.WorldBounds;
+                if (b.size.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 p = myTransform.position;
+                    Vector3 center = new Vector3(b.center.x, 0f, b.center.z);
+                    Vector3 toCenter = center - new Vector3(p.x, 0f, p.z);
+                    Vector3 toCenterN =
+                        toCenter.sqrMagnitude > 0.0001f
+                            ? toCenter.normalized
+                            : (desiredDirXZ.sqrMagnitude > 0.0001f ? desiredDirXZ.normalized : Vector3.forward);
+
+                    Vector3 desiredN =
+                        desiredDirXZ.sqrMagnitude > 0.0001f ? desiredDirXZ.normalized : toCenterN;
+
+                    bool outside =
+                        p.x < b.min.x || p.x > b.max.x ||
+                        p.z < b.min.z || p.z > b.max.z;
+
+                    bool chasing = lockedOn && playerTransform != null;
+
+                    if (outside)
+                    {
+                        // Fuori: frena e sterza verso il centro. Niente full
+                        // throttle: il muso e' ancora rivolto verso l'esterno,
+                        // accelerebbe ancora piu' fuori prima di girare.
+                        // (L'hard clamp in FixedUpdate impedisce comunque
+                        // l'uscita reale; qui recuperiamo direzione/speed.)
+                        finalDir = toCenterN;
+                        finalMag = 0.3f;
+                        brake = true;
+                    }
+                    else if (edgeMargin > 0.0001f)
+                    {
+                        float dxMin = p.x - b.min.x;
+                        float dxMax = b.max.x - p.x;
+                        float dzMin = p.z - b.min.z;
+                        float dzMax = b.max.z - p.z;
+                        float minEdge = Mathf.Min(dxMin, dxMax, dzMin, dzMax);
+
+                        if (minEdge < edgeMargin)
+                        {
+                            float t = 1f - (minEdge / edgeMargin);
+                            float w = t * t; // curva aggressiva verso il bordo
+
+                            // In INSEGUIMENTO (lockedOn): contenimento piu'
+                            // morbido. Dimezzo blenda e rallentamento e NON
+                            // freno pieno: il NPC deve raggiungere/urtare il
+                            // giocatore anche se e' appiccicato al bordo;
+                            // l'hard clamp resta la garanzia di non uscire.
+                            // In WANDER: piu' deciso (frena + sterza al centro)
+                            // perche' non c'e' un target da raggiungere al bordo.
+                            float wUse = chasing ? w * 0.5f : w;
+
+                            Vector3 blended = desiredN * (1f - wUse) + toCenterN * wUse;
+                            if (blended.sqrMagnitude > 0.0001f)
+                                finalDir = blended.normalized;
+
+                            bool headingOut = Vector3.Dot(desiredN, toCenterN) < 0f;
+
+                            if (chasing)
+                            {
+                                // Inseguimento: rallenta soltanto, niente full
+                                // brake, cosi' arriva al giocatore al bordo.
+                                finalMag = magnitude * (1f - wUse * 0.8f);
+                            }
+                            else if (headingOut)
+                            {
+                                // Wander che punta fuori: frena + sterza al
+                                // centro per non sforare.
+                                brake = true;
+                                finalMag = 0.3f;
+                            }
+                            else
+                            {
+                                // Wander che punta al centro: rallenta.
+                                finalMag = magnitude * (1f - w * 0.8f);
+                            }
+                        }
+                    }
+                }
             }
 
-            // --- Contenimento soft ---
-            // Se vicino al bordo del territorio, blenda la direzione con un
-            // vettore verso il centro (peso crescente al calare della
-            // distanza dal bordo). Cosi' il kart non esce mai dalla zona
-            // senza hard-clamp bruschi.
-            desiredDirXZ = ApplyContainment(desiredDirXZ);
-            if (desiredDirXZ.sqrMagnitude <= 0.0001f)
+            if (finalMag <= 0.001f || finalDir.sqrMagnitude <= 0.0001f)
             {
                 move = Vector2.zero;
                 brake = false;
@@ -239,9 +358,87 @@ namespace ArcadeKart.Gameplay
             // Il KartController interpreta Move in spazio camera: ritrasforma
             // Move in direzione mondo usando la base della camera. Invertendo
             // qui la base, il round-trip recupera la direzione mondo voluta.
-            move = WorldDirToCameraRelative(desiredDirXZ) * magnitude;
-            brake = false;
+            move = WorldDirToCameraRelative(finalDir) * finalMag;
+            // brake e' stato deciso dal contenimento (true se frenata); drift
+            // mai usato dal NPC.
             drift = false;
+        }
+
+        // Hard clamp di sicurezza (paraurti): garantisce che il kart NON
+        // esca mai visibilmente dal territorio. Il soft layer in Update frena
+        // e sterza verso il centro, ma col slip/momentum non e' infallibile;
+        // qui, in FixedUpdate (DOPO il KartController grazie a
+        // DefaultExecutionOrder(100)), se la posizione XZ e' fuori dai
+        // bounds la clampa al bordo e azzera SOLO la componente di velocity
+        // uscente (mantiene quella tangenziale: il kart scivola lungo il
+        // "muro" invisibile). Solo X/Z: la Y resta alla sospensione.
+        private void FixedUpdate()
+        {
+            if (territoryZone == null || rb == null)
+                return;
+
+            Bounds b = territoryZone.WorldBounds;
+            if (b.size.sqrMagnitude <= 0.0001f)
+                return;
+
+            Vector3 p = rb.position;
+
+            // Failsafe anti-caduta: se il kart e' sceso molto sotto il centro
+            // del territorio (es. caduto in un buco o fuori dalla mappa per un
+            // territorio mal piazzato), lo teletrasportiamo al centro del
+            // territorio. KartController.Teleport azzera velocity/drift/stato.
+            if (fallFailsafeDepth > 0f && p.y < b.center.y - fallFailsafeDepth)
+            {
+                Vector3 respawn = new Vector3(b.center.x, b.center.y + 1.2f, b.center.z);
+                if (kart != null)
+                    kart.Teleport(respawn, Quaternion.Euler(0f, myTransform.eulerAngles.y, 0f));
+                wanderTarget = null;
+                return;
+            }
+
+            Vector3 v = rb.linearVelocity;
+            bool changed = false;
+
+            if (p.x < b.min.x)
+            {
+                p.x = b.min.x;
+                if (v.x < 0f) v.x = 0f;
+                changed = true;
+            }
+            else if (p.x > b.max.x)
+            {
+                p.x = b.max.x;
+                if (v.x > 0f) v.x = 0f;
+                changed = true;
+            }
+
+            if (p.z < b.min.z)
+            {
+                p.z = b.min.z;
+                if (v.z < 0f) v.z = 0f;
+                changed = true;
+            }
+            else if (p.z > b.max.z)
+            {
+                p.z = b.max.z;
+                if (v.z > 0f) v.z = 0f;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                rb.position = p;
+                rb.linearVelocity = v;
+
+                // REGOLA DI TEST (richiesta): quando il kart TOCCA il limite
+                // del trigger (viene clampato al bordo), "cambia punto":
+                // abbandona il target wander corrente (ne pesca uno nuovo al
+                // prossimo Update) e spegne il lock cosi' smette di inseguire
+                // e riprende a vagare. Rompe qualsiasi fissazione su una
+                // direzione quando il kart e' schiacciato contro il bordo.
+                wanderTarget = null;
+                lockedOn = false;
+            }
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -359,7 +556,12 @@ namespace ArcadeKart.Gameplay
             }
 
             if (!wanderTarget.HasValue)
+            {
                 wanderTarget = PickRandomPointInZone();
+                // Registra quando e' stato scelto: usato dal wanderTimeout.
+                if (wanderTarget.HasValue)
+                    wanderTargetTime = Time.time;
+            }
 
             return wanderTarget.HasValue ? wanderTarget.Value : myTransform.position;
         }
@@ -373,51 +575,20 @@ namespace ArcadeKart.Gameplay
             if (b.size.sqrMagnitude <= 0.0001f)
                 return null;
 
-            // Margine interno: non pescare sul bordo, cosi' il wander punta
-            // sempre dentro la zona e il contenimento ha tempo di agire
-            // prima che il kart arrivi al bordo.
-            float mx = Mathf.Max(edgeMargin * 0.5f, 0.5f);
-            float mz = Mathf.Max(edgeMargin * 0.5f, 0.5f);
+            // Margine interno = edgeMargin + wanderArrivalRadius: i punti
+            // vengono pescati FUORI dalla zona di frenata del contenimento,
+            // cosi' sono sempre raggiungibili (altrimenti un target nella zona
+            // di frenata non verrebbe mai raggiunto e il NPC oscillerebbe /
+            // si "incollerebbe" a quella direzione). Clampato al 45% della
+            // dimensione: se il box e' piccolo, restringe senza degenerare
+            // (Range(a,a) = a -> centro).
+            float spanX = b.max.x - b.min.x;
+            float spanZ = b.max.z - b.min.z;
+            float mx = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, spanX * 0.45f);
+            float mz = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, spanZ * 0.45f);
             float x = Random.Range(b.min.x + mx, b.max.x - mx);
             float z = Random.Range(b.min.z + mz, b.max.z - mz);
             return new Vector3(x, myTransform.position.y, z);
-        }
-
-        // Blenda la direzione desiderata con un vettore verso il centro del
-        // territorio quando il kart e' vicino al bordo. Peso crescente da 0
-        // (lontano dal bordo) a 1 (sul bordo). Soft: niente clamp duro.
-        private Vector3 ApplyContainment(Vector3 desiredDir)
-        {
-            if (territoryZone == null)
-                return desiredDir;
-
-            Bounds b = territoryZone.WorldBounds;
-            if (b.size.sqrMagnitude <= 0.0001f || edgeMargin <= 0.0001f)
-                return desiredDir;
-
-            Vector3 p = myTransform.position;
-            float dxMin = Mathf.Abs(p.x - b.min.x);
-            float dxMax = Mathf.Abs(b.max.x - p.x);
-            float dzMin = Mathf.Abs(p.z - b.min.z);
-            float dzMax = Mathf.Abs(b.max.z - p.z);
-            float minEdge = Mathf.Min(dxMin, dxMax, dzMin, dzMax);
-
-            if (minEdge >= edgeMargin)
-                return desiredDir;
-
-            // Peso 0..1: 0 sul limite della zona di margine, 1 sul bordo.
-            float w = 1f - (minEdge / edgeMargin);
-
-            Vector3 toCenter = new Vector3(b.center.x - p.x, 0f, b.center.z - p.z);
-            if (toCenter.sqrMagnitude <= 0.0001f)
-                return desiredDir;
-            toCenter.Normalize();
-
-            Vector3 dirNorm = desiredDir.sqrMagnitude > 0.0001f ? desiredDir.normalized : toCenter;
-            Vector3 blended = dirNorm * (1f - w) + toCenter * w;
-            if (blended.sqrMagnitude <= 0.0001f)
-                return desiredDir;
-            return blended.normalized;
         }
 
         #endregion

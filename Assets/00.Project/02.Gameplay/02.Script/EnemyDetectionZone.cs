@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace ArcadeKart.Gameplay
@@ -7,13 +8,19 @@ namespace ArcadeKart.Gameplay
     //   1) Rileva l'ingresso/uscita del kart del giocatore (rendendolo
     //      "visibile" / in range per il cono visivo del NPC). L'EnemyKart
     //      legge PlayerInside ogni frame.
-    //   2) Fornisce i suoi bounds mondiali (AABB del Collider) per la logica
+    //   2) Fornisce i suoi bounds mondali (AABB del Collider) per la logica
     //      di contenimento: il kart NPC deve restare e guidare dentro questa
-    //      zona (steerare verso il centro quando si avvicina al bordo) e
-    //      pescare dentro i bounds i punti del wander.
-    // Stesso stile di CameraPhaseTrigger / TriggerFineLivello: filtro per tag,
-    // isTrigger automatico in Reset/Awake, reset dello stato in OnEnable
-    // (la radice del livello viene riattivata ad ogni partita).
+    //      zona (sterzare/frenare verso il centro vicino al bordo + hard
+    //      clamp in FixedUpdate) e pescare dentro i bounds i punti wander.
+    //
+    // PlayerInside e' un CONTEGGIO di collider (HashSet) e non un bool: il
+    // kart del giocatore ha piu' di un collider taggato Player (sfera solida
+    // + capsula trigger). Con un bool, l'uscita di uno solo dei collider
+    // mentre l'altro e' ancora dentro (giocatore a cavallo del bordo)
+    // spegneva il flag e faceva sfarfallare il lock del NPC. Col conteggio,
+    // PlayerInside resta true finche' c'e' almeno un collider del giocatore
+    // dentro. Inoltre puliamo i null (collider distrutti) in Update per
+    // sicurezza.
     [RequireComponent(typeof(Collider))]
     public class EnemyDetectionZone : MonoBehaviour
     {
@@ -21,19 +28,18 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Se assegnato, il trigger reagisce solo a questo tag. Consigliato: Player.")]
         private string requiredTag = "Player";
 
-        // True mentre il kart del giocatore e' dentro la zona. Letto ogni
-        // frame dall'EnemyKart per decidere se il giocatore e' "in range"
-        // (candidato al rilevamento via cono visivo). Si azzera in OnEnable.
-        public bool PlayerInside { get; private set; }
+        // True mentre almeno un collider del giocatore e' dentro la zona.
+        // Letto ogni frame dall'EnemyKart. Si azzera in OnEnable.
+        public bool PlayerInside => insideColliders.Count > 0;
 
         // Bounds mondiali (AABB) del Collider della zona. Usati dall'EnemyKart
-        // per il contenimento (steerare verso il centro vicino al bordo) e per
-        // pescare i punti wander. Per Box allineati al mondo e' esatto; per
-        // Box ruotate e' un'approssimazione (AABB), accettabile per un
-        // territorio arcade.
+        // per il contenimento e per pescare i punti wander. Per Box
+        // allineati al mondo e' esatto; per Box ruotate e' un'approssimazione
+        // (AABB), accettabile per un territorio arcade.
         public Bounds WorldBounds => cachedCollider != null ? cachedCollider.bounds : new Bounds();
 
         private Collider cachedCollider;
+        private readonly HashSet<Collider> insideColliders = new HashSet<Collider>();
 
         private void Reset()
         {
@@ -54,10 +60,20 @@ namespace ArcadeKart.Gameplay
         private void OnEnable()
         {
             // La radice del livello viene riattivata ad ogni partita: il
-            // trigger riceve OnEnable e riparte pulito (il giocatore non e'
-            // piu' dentro). cachedCollider e' gia' stato preso in Awake
-            // (che gira una sola volta); qui resettiamo solo lo stato.
-            PlayerInside = false;
+            // trigger riceve OnEnable e riparte pulito (niente collider
+            // "appesi" da una sessione precedente).
+            insideColliders.Clear();
+        }
+
+        private void Update()
+        {
+            // Pulizia difensiva: se un collider del giocatore e' stato
+            // distrutto/disattivato senza passare da OnTriggerExit (es. kart
+            // respawnato/teletrasportato), togliamolo dal conteggio.
+            if (insideColliders.Count == 0)
+                return;
+
+            insideColliders.RemoveWhere(c => c == null || !c.gameObject.activeInHierarchy);
         }
 
         private void OnTriggerEnter(Collider other)
@@ -65,7 +81,7 @@ namespace ArcadeKart.Gameplay
             if (!string.IsNullOrEmpty(requiredTag) && !other.CompareTag(requiredTag))
                 return;
 
-            PlayerInside = true;
+            insideColliders.Add(other);
         }
 
         private void OnTriggerExit(Collider other)
@@ -73,7 +89,7 @@ namespace ArcadeKart.Gameplay
             if (!string.IsNullOrEmpty(requiredTag) && !other.CompareTag(requiredTag))
                 return;
 
-            PlayerInside = false;
+            insideColliders.Remove(other);
         }
     }
 }
