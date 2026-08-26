@@ -1094,7 +1094,12 @@ private void UpdateSkateRampLaunchState()
                 effectiveTurn = Mathf.Max(effectiveTurn, turnRate * cameraRelativeTurnResponsiveness);
             }
 
-            if (!IsGrounded)
+            // In aria il kart perde grip di sterzata (airControl); in modalita'
+            // AI bypassiamo perche' il NPC deve poter sterzare SEMPRE, anche in
+            // volo: il suo airControl e' 0 (copiato dal giocatore) e senza
+            // questo bypass resterebbe bloccato dritto in una direzione fissa
+            // ("sempre verso su") appena perde il contatto col terreno.
+            if (!aiSteeringMode && !IsGrounded)
                 effectiveTurn *= airControl;
 
             if (CurrentDrift && IsGrounded)

@@ -79,6 +79,17 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Se il kart scende sotto questo dislivello rispetto al centro del territorio (es. cade in un buco), viene teletrasportato al centro del territorio con velocity azzerata. Previene il NPC perso sotto la mappa.")]
         private float fallFailsafeDepth = 10f;
 
+        [Header("Tocco muro (test)")]
+        [SerializeField, Tooltip("Distanza dal bordo del territorio sotto la quale si considera che il kart 'tocca il muro' (da dentro). Sotto questa soglia il NPC cambia punto wander (riflesso opposto).")]
+        private float touchThreshold = 1f;
+
+        [SerializeField, Tooltip("Tempo minimo (sec) fra due cambio-punto da tocco-muro, per evitare spam/parasita.")]
+        private float wallTouchCooldown = 0.3f;
+
+        [Header("Debug")]
+        [SerializeField, Tooltip("Log diagnostico in Console: nuovi target wander, tocchi muro, stato. TEMPORANEO: rimuovere dopo diagnosi.")]
+        private bool debugLog = true;
+
         #endregion
 
         #region IKartInput
@@ -119,6 +130,10 @@ namespace ArcadeKart.Gameplay
         // Time.time in cui e' stato scelto l'attuale wanderTarget. Usato per
         // il wanderTimeout: se scade senza averlo raggiunto, viene scartato.
         private float wanderTargetTime;
+        // Time.time dell'ultimo tocco-muro (per il wallTouchCooldown).
+        private float lastWallTouchTime = -999f;
+        // Timer per il log di stato periodico (debug).
+        private float nextDebugStateLog;
 
         #endregion
 
@@ -169,6 +184,19 @@ namespace ArcadeKart.Gameplay
             // precedente resterebbe "appeso" (stale) nei frame successivi.
             brake = false;
             drift = false;
+
+            // --- Log di stato periodico (TEMPORANEO, debug): per diagnosticare
+            // "sempre verso su" - ci dice se e' grounded, se rileva il player,
+            // se e' in chase. Da rimuovere dopo diagnosi.
+            if (debugLog && Time.time >= nextDebugStateLog)
+            {
+                nextDebugStateLog = Time.time + 1f;
+                bool pInside = territoryZone != null && territoryZone.PlayerInside;
+                bool grounded = kart != null && kart.IsGrounded;
+                Vector3 pos = myTransform.position;
+                Vector3 fwd = myTransform.forward; fwd.y = 0f;
+                Debug.Log($"[EnemyKart] stato: grounded={grounded} playerInside={pInside} lockedOn={lockedOn} pos={pos} fwd={fwd} vel={rb.linearVelocity}", this);
+            }
 
             // --- Rilevamento ---
             bool playerInRange = territoryZone != null && territoryZone.PlayerInside;
@@ -429,15 +457,43 @@ namespace ArcadeKart.Gameplay
             {
                 rb.position = p;
                 rb.linearVelocity = v;
+            }
 
-                // REGOLA DI TEST (richiesta): quando il kart TOCCA il limite
-                // del trigger (viene clampato al bordo), "cambia punto":
-                // abbandona il target wander corrente (ne pesca uno nuovo al
-                // prossimo Update) e spegne il lock cosi' smette di inseguire
-                // e riprende a vagare. Rompe qualsiasi fissazione su una
-                // direzione quando il kart e' schiacciato contro il bordo.
-                wanderTarget = null;
+            // --- Tocco muro (test, richiesta): "quando tocca il limite del
+            // trigger, cambia punto" ---
+            // Prima scattava solo su `changed` (posizione FUORI bounds ->
+            // clampata), ma il kart che preme il muro da DENTRO non triggerava
+            // mai. Ora scatta anche quando e' entro touchThreshold dal bordo
+            // (tocco da dentro). Al tocco: target wander riflesso sul lato
+            // OPPETO del territorio (cosi' gira visibilmente ~180 gradi) +
+            // spegne il lock. Cooldown per evitare spam.
+            float dxMinT = p.x - b.min.x;
+            float dxMaxT = b.max.x - p.x;
+            float dzMinT = p.z - b.min.z;
+            float dzMaxT = b.max.z - p.z;
+            float minEdgeT = Mathf.Min(dxMinT, dxMaxT, dzMinT, dzMaxT);
+
+            bool touching = changed || (touchThreshold > 0f && minEdgeT <= touchThreshold);
+            if (touching && (Time.time - lastWallTouchTime) >= wallTouchCooldown)
+            {
+                lastWallTouchTime = Time.time;
+
+                // Target riflesso rispetto al centro -> lato opposto, clampato
+                // ai bounds interni (stesso margine di PickRandomPointInZone).
+                Vector3 center = new Vector3(b.center.x, p.y, b.center.z);
+                Vector3 reflected = center + (center - p); // = 2*center - p
+                float mxT = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, (b.max.x - b.min.x) * 0.45f);
+                float mzT = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, (b.max.z - b.min.z) * 0.45f);
+                reflected.x = Mathf.Clamp(reflected.x, b.min.x + mxT, b.max.x - mxT);
+                reflected.z = Mathf.Clamp(reflected.z, b.min.z + mzT, b.max.z - mzT);
+                reflected.y = p.y;
+
+                wanderTarget = reflected;
+                wanderTargetTime = Time.time;
                 lockedOn = false;
+
+                if (debugLog)
+                    Debug.Log($"[EnemyKart] TOCCO MURO (minEdge={minEdgeT:F2} changed={changed} pos={p}) -> riflesso a {reflected}", this);
             }
         }
 
@@ -560,7 +616,15 @@ namespace ArcadeKart.Gameplay
                 wanderTarget = PickRandomPointInZone();
                 // Registra quando e' stato scelto: usato dal wanderTimeout.
                 if (wanderTarget.HasValue)
+                {
                     wanderTargetTime = Time.time;
+                    if (debugLog)
+                    {
+                        Vector3 wt = wanderTarget.Value;
+                        Vector3 dir = wt - myTransform.position; dir.y = 0f;
+                        Debug.Log($"[EnemyKart] Nuovo target wander: {wt} (dir={dir}, dist={dir.magnitude:F2})", this);
+                    }
+                }
             }
 
             return wanderTarget.HasValue ? wanderTarget.Value : myTransform.position;
