@@ -5,7 +5,6 @@ using UnityEngine.Events;
 namespace ArcadeKart.Core
 {
     [RequireComponent(typeof(Rigidbody))]
-    [RequireComponent(typeof(KartInput))]
     public class KartController : MonoBehaviour
     {
         #region Inspector
@@ -245,6 +244,10 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' minima di urto per invocare OnImpact.")]
         private float impactThreshold = 5f;
 
+        [Header("AI / Sterzata costante")]
+        [SerializeField, Tooltip("Modalita' per kart pilotati dalla CPU (NPC). Bypassa lo snap di inversione (instantRealignAngle), il gating 'ruota-prima-di-muoverti' (isReorientingFromStop) e la frenata/limitazione di reorientation in corsa (isReorientingWhileMoving), e usa sempre il turnRate pieno a qualsiasi velocita': il kart sterza COSTANTEMENTE verso la direzione desiderata e accelera sempre verso il target, senza scatti ne' blocchi. Lasciarlo false sul kart del giocatore. EnemyKart lo attiva in Awake.")]
+        private bool aiSteeringMode = false;
+
         #endregion
 
         #region Events
@@ -259,6 +262,16 @@ namespace ArcadeKart.Core
 
         public float CurrentSpeed { get; private set; }
         public float MaxSpeed => maxSpeed;
+
+        // Modalita' AI: vedi tooltip di aiSteeringMode. Letta/scritta dal NPC
+        // (EnemyKart) in Awake per attivare la sterzata costante. Pubblica
+        // perche' deve essere leggibile anche da fuori (es. debug).
+        public bool AiSteeringMode
+        {
+            get => aiSteeringMode;
+            set => aiSteeringMode = value;
+        }
+
         public bool IsGrounded { get; private set; }
 
         public bool IsDrifting =>
@@ -358,7 +371,9 @@ namespace ArcadeKart.Core
                 RigidbodyConstraints.FreezeRotationX |
                 RigidbodyConstraints.FreezeRotationZ;
 
-            input = GetComponent<KartInput>();
+            input = GetComponent<IKartInput>();
+            if (input == null)
+                Debug.LogWarning("[KartController] Nessun IKartInput trovato su " + name + " (KartInput per il giocatore, EnemyKart per il NPC). Il kart non rispondera' a nessun input.", this);
 
             if (groundCheckOrigin == null)
             {
@@ -544,7 +559,7 @@ namespace ArcadeKart.Core
         #region Internal
 
         private Rigidbody rb;
-        private KartInput input;
+        private IKartInput input;
 
         // Gate dei controlli: KartInput cacha i valori letti in Update, quindi
         // disattivarlo congelerebbe l'ultimo input (W tenuto = accelerazione
@@ -992,7 +1007,10 @@ private void UpdateSkateRampLaunchState()
             // laterale preesistente viene lasciata al normale smorzamento della
             // grip. Sotto la soglia si ricade nel comportamento graduale originale
             // (carrello della spesa con slip e drift).
-            if (absAngle >= instantRealignAngle)
+            // In modalita' AI bypassiamo lo snap: il NPC non deve scattare verso
+            // la nuova direzione su grandi cambi di angolo, ma sterzare sempre
+            // gradualmente (vedi richiesta: "constantemente sterzare").
+            if (!aiSteeringMode && absAngle >= instantRealignAngle)
             {
                 Vector3 vel = rb.linearVelocity;
                 Vector3 planarVel = new Vector3(vel.x, 0f, vel.z);
@@ -1025,40 +1043,51 @@ private void UpdateSkateRampLaunchState()
             // laterale assorbito progressivamente dalla grip (carrello della
             // spesa). shoppingCartSlip riduce la grip alle alte velocita' in
             // curva e isDrifting la abbassa ulteriormente col tasto drift.
-            Vector3 planarVelocity = rb.linearVelocity;
-            planarVelocity.y = 0f;
-            float planarSpeed = planarVelocity.magnitude;
+            // In modalita' AI saltiamo del tutto il rilevamento di
+            // reorientation (ruota-prima-di-muoversi da fermo e inversione in
+            // corsa): il NPC non deve mai limitare l'accelerazione ne'
+            // applicare la frenata di reorientation, deve solo sterzare.
+            if (!aiSteeringMode)
+            {
+                Vector3 planarVelocity = rb.linearVelocity;
+                planarVelocity.y = 0f;
+                float planarSpeed = planarVelocity.magnitude;
 
-            bool nearStopped = planarSpeed <= rotateBeforeMoveSpeedThreshold;
-            bool movingFastEnough = planarSpeed >= movingReorientationMinSpeed;
+                bool nearStopped = planarSpeed <= rotateBeforeMoveSpeedThreshold;
+                bool movingFastEnough = planarSpeed >= movingReorientationMinSpeed;
 
-            if (nearStopped && absAngle > rotateBeforeMoveReleaseAngle)
-            {
-                isReorientingFromStop = true;
-            }
-            else if (
-                IsGrounded &&
-                movingFastEnough &&
-                absAngle >= movingReorientationEnterAngle &&
-                desiredMoveAmount > 0.001f
-            )
-            {
-                isReorientingWhileMoving = true;
-            }
-            else if (
-                IsGrounded &&
-                movingFastEnough &&
-                absAngle > movingReorientationExitAngle &&
-                Vector3.Dot(currentForward, desiredForward) < 0f
-            )
-            {
-                isReorientingWhileMoving = true;
+                if (nearStopped && absAngle > rotateBeforeMoveReleaseAngle)
+                {
+                    isReorientingFromStop = true;
+                }
+                else if (
+                    IsGrounded &&
+                    movingFastEnough &&
+                    absAngle >= movingReorientationEnterAngle &&
+                    desiredMoveAmount > 0.001f
+                )
+                {
+                    isReorientingWhileMoving = true;
+                }
+                else if (
+                    IsGrounded &&
+                    movingFastEnough &&
+                    absAngle > movingReorientationExitAngle &&
+                    Vector3.Dot(currentForward, desiredForward) < 0f
+                )
+                {
+                    isReorientingWhileMoving = true;
+                }
             }
 
             float normalizedTurnInput = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
 
             float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
-            float effectiveTurn = turnRate * Mathf.Lerp(turnAtRest, 1f, speedRatio);
+            // In modalita' AI usiamo sempre turnFactor 1: niente riduzione
+            // turnAtRest a bassa velocita', cosi' il NPC sterza a rate pieno
+            // verso la direzione desiderata anche da fermo o in manovra.
+            float turnFactor = aiSteeringMode ? 1f : Mathf.Lerp(turnAtRest, 1f, speedRatio);
+            float effectiveTurn = turnRate * turnFactor;
 
             if (isReorientingFromStop || isReorientingWhileMoving)
             {

@@ -27,7 +27,11 @@ using UnityEngine.InputSystem;
 
 namespace ArcadeKart.Core
 {
-    public class KartInput : MonoBehaviour
+    // Implementa IKartInput: cosi' il KartController puo' leggere l'input da
+    // una qualsiasi sorgente (giocatore via KartInput, CPU via EnemyKart)
+    // senza dipendere dal tipo concreto. La logica resta invariata: legge
+    // ancora l'Input System nelle stesse proprieta' di prima.
+    public class KartInput : MonoBehaviour, IKartInput
     {
         #region Inspector
 

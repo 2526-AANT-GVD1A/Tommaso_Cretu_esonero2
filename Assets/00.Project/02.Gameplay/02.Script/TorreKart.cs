@@ -578,6 +578,44 @@ namespace ArcadeKart.Gameplay
                 Destroy(oldest);
         }
 
+        // Rimuove gli ultimi N oggetti raccolti (dalla CIMA della torre,
+        // cioe' i piu' recenti). Usato dal kart NPC nemico (EnemyKart) quando
+        // entra in contatto fisico col giocatore: gli fa "cadere" gli
+        // ultimi oggetti presi nel livello. Distrugge i cloni visivi senza
+        // rilasciarli nel mondo (coerente con RemoveOldestItem, che fa lo
+        // stesso per l'overflow del stack visibile). Se count eccede
+        // ItemCount, li toglie tutti. NON tocca totalCollected: quello e' un
+        // punteggio cumulativo di "quanti ne ho raccolti dall'ultimo reset",
+        // non "quanti ne ho addosso ora" (quello e' ItemCount).
+        public void RemoveLastItems(int count)
+        {
+            if (count <= 0 || spawnedItems.Count == 0)
+                return;
+
+            int toRemove = Mathf.Min(count, spawnedItems.Count);
+
+            for (int i = 0; i < toRemove; i++)
+            {
+                int last = spawnedItems.Count - 1;
+                GameObject item = spawnedItems[last];
+                spawnedItems.RemoveAt(last);
+
+                // Manteniamo le liste wobble/displayed allineate a
+                // spawnedItems togliendo dalla stessa estremita' (cima).
+                if (wobble.Count > 0)
+                    wobble.RemoveAt(wobble.Count - 1);
+                if (displayedPitch.Count > 0)
+                    displayedPitch.RemoveAt(displayedPitch.Count - 1);
+                if (displayedRoll.Count > 0)
+                    displayedRoll.RemoveAt(displayedRoll.Count - 1);
+
+                if (item != null)
+                    Destroy(item);
+            }
+
+            RefreshStackLayout();
+        }
+
         private void RefreshStackLayout()
         {
             for (int i = 0; i < spawnedItems.Count; i++)
