@@ -75,6 +75,12 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Tempo massimo (sec) per raggiungere un punto wander: se scade, il NPC ne pesca subito un altro. Copre target irraggiungibili (dietro un muro) e stalli contro geometria ('si incastra').")]
         private float wanderTimeout = 10f;
 
+        [SerializeField, Tooltip("Se il kart ha un target wander ma la sua velocita' planare resta sotto stuckSpeedThreshold per piu' di stuckTimeout secondi (es. all'avvio su una superficie non-ground dove basso throttle non supera l'attrito), forza un target LONTANO riflesso (throttle pieno) per farlo ripartire.")]
+        private float stuckTimeout = 2f;
+
+        [SerializeField, Tooltip("Soglia di velocita' planare (m/s) sotto la quale il kart e' considerato 'fermo' ai fini dello stuck detection.")]
+        private float stuckSpeedThreshold = 0.5f;
+
         [Header("Failsafe")]
         [SerializeField, Tooltip("Se il kart scende sotto questo dislivello rispetto al centro del territorio (es. cade in un buco), viene teletrasportato al centro del territorio con velocity azzerata. Previene il NPC perso sotto la mappa.")]
         private float fallFailsafeDepth = 10f;
@@ -134,6 +140,9 @@ namespace ArcadeKart.Gameplay
         private float lastWallTouchTime = -999f;
         // Timer per il log di stato periodico (debug).
         private float nextDebugStateLog;
+        // Accumulo tempo "fermo" (velocita' bassa mentre c'e' un target wander):
+        // se supera stuckTimeout, forzo un target lontano per disincagliare.
+        private float stuckTimer;
 
         #endregion
 
@@ -256,6 +265,37 @@ namespace ArcadeKart.Gameplay
                     brake = false;
                     drift = false;
                     return;
+                }
+
+                // Stuck detection: se ho un target non ancora raggiunto ma il
+                // kart e' fermo (velocita' planare bassa) per troppo tempo
+                // (es. avvio su superficie non-ground: basso throttle non
+                // supera l'attrito del contatto), forzo un target LONTANO
+                // riflesso (throttle pieno) per disincagliarlo.
+                Vector3 velXZ = rb.linearVelocity;
+                velXZ.y = 0f;
+                float planarSpeed = velXZ.magnitude;
+
+                if (dist > wanderArrivalRadius && planarSpeed < stuckSpeedThreshold)
+                    stuckTimer += Time.deltaTime;
+                else
+                    stuckTimer = 0f;
+
+                if (stuckTimer > stuckTimeout)
+                {
+                    stuckTimer = 0f;
+                    Vector3? far = ComputeReflectedTarget();
+                    if (far.HasValue)
+                    {
+                        wanderTarget = far;
+                        wanderTargetTime = Time.time;
+                        target = far.Value;
+                        toTarget = target - myTransform.position;
+                        toTarget.y = 0f;
+                        dist = toTarget.magnitude;
+                        if (debugLog)
+                            Debug.Log($"[EnemyKart] STUCK ({planarSpeed:F2} m/s per >{stuckTimeout}s): forzo target lontano {far.Value} (dist={dist:F2})", this);
+                    }
                 }
 
                 if (dist <= wanderArrivalRadius)
@@ -478,22 +518,18 @@ namespace ArcadeKart.Gameplay
             {
                 lastWallTouchTime = Time.time;
 
-                // Target riflesso rispetto al centro -> lato opposto, clampato
-                // ai bounds interni (stesso margine di PickRandomPointInZone).
-                Vector3 center = new Vector3(b.center.x, p.y, b.center.z);
-                Vector3 reflected = center + (center - p); // = 2*center - p
-                float mxT = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, (b.max.x - b.min.x) * 0.45f);
-                float mzT = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, (b.max.z - b.min.z) * 0.45f);
-                reflected.x = Mathf.Clamp(reflected.x, b.min.x + mxT, b.max.x - mxT);
-                reflected.z = Mathf.Clamp(reflected.z, b.min.z + mzT, b.max.z - mzT);
-                reflected.y = p.y;
+                // Target riflesso rispetto al centro -> lato opposto (throttle
+                // pieno per il giro ~180 gradi). Riusato dallo stuck detection.
+                Vector3? reflected = ComputeReflectedTarget();
+                if (reflected.HasValue)
+                {
+                    wanderTarget = reflected;
+                    wanderTargetTime = Time.time;
+                    lockedOn = false;
 
-                wanderTarget = reflected;
-                wanderTargetTime = Time.time;
-                lockedOn = false;
-
-                if (debugLog)
-                    Debug.Log($"[EnemyKart] TOCCO MURO (minEdge={minEdgeT:F2} changed={changed} pos={p}) -> riflesso a {reflected}", this);
+                    if (debugLog)
+                        Debug.Log($"[EnemyKart] TOCCO MURO (minEdge={minEdgeT:F2} changed={changed} pos={p}) -> riflesso a {reflected.Value}", this);
+                }
             }
         }
 
@@ -653,6 +689,31 @@ namespace ArcadeKart.Gameplay
             float x = Random.Range(b.min.x + mx, b.max.x - mx);
             float z = Random.Range(b.min.z + mz, b.max.z - mz);
             return new Vector3(x, myTransform.position.y, z);
+        }
+
+        // Target wander riflesso rispetto al centro del territorio (lato
+        // opposto), clampato ai bounds interni. Usato sia dal tocco-muro
+        // (FixedUpdate) sia dallo stuck detection (Update) per forzare un
+        // cambio direzione netto (~180 gradi) e throttle pieno.
+        private Vector3? ComputeReflectedTarget()
+        {
+            if (territoryZone == null)
+                return null;
+
+            Bounds b = territoryZone.WorldBounds;
+            if (b.size.sqrMagnitude <= 0.0001f)
+                return null;
+
+            Vector3 p = myTransform.position;
+            Vector3 center = new Vector3(b.center.x, p.y, b.center.z);
+            Vector3 reflected = center + (center - p); // = 2*center - p
+
+            float mx = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, (b.max.x - b.min.x) * 0.45f);
+            float mz = Mathf.Clamp(edgeMargin + wanderArrivalRadius, 0f, (b.max.z - b.min.z) * 0.45f);
+            reflected.x = Mathf.Clamp(reflected.x, b.min.x + mx, b.max.x - mx);
+            reflected.z = Mathf.Clamp(reflected.z, b.min.z + mz, b.max.z - mz);
+            reflected.y = p.y;
+            return reflected;
         }
 
         #endregion
