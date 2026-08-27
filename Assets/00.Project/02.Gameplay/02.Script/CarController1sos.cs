@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -118,8 +119,26 @@ namespace ArcadeKart.Core
         private float driftVisualLerpSpeed = 8f;
 
         [Header("Active Drift")]
-        [SerializeField, Tooltip("Abilita il drift attivo (Shift + boost + sterzo). Se disattivato resta solo il drift passivo (Shift tenuto): niente derapata carica, niente mini-turbo.")]
-        private bool activeDriftEnabled = true;
+        [SerializeField, Tooltip("Il drift (attivo e passivo) e' abilitato solo se ALMENO UNO di questi oggetti e' attivo nella scena (activeInHierarchy). Attivando/disattivando un oggetto della lista (SetActive) si abilita/disabilita il drift. Lista vuota o tutti nulli = drift sempre disattivo.")]
+        private List<GameObject> activeDriftToggleObjects;
+
+        // Stato del gate drift: true se ALMENO UN oggetto della lista e'
+        // assegnato e attivo nella gerarchia (activeInHierarchy copre anche
+        // la disattivazione di un genitore). Lista vuota o tutti nulli =
+        // drift disattivo.
+        private bool ActiveDriftEnabled
+        {
+            get
+            {
+                if (activeDriftToggleObjects == null) return false;
+                for (int i = 0; i < activeDriftToggleObjects.Count; i++)
+                {
+                    GameObject go = activeDriftToggleObjects[i];
+                    if (go != null && go.activeInHierarchy) return true;
+                }
+                return false;
+            }
+        }
 
         [SerializeField, Tooltip("Velocita' planare minima del kart per attivare e mantenere il drift attivo (Shift + sterzo). Sotto questo valore (es. dopo un impatto col muro) il drift si interrompe, senza boost.")]
         private float activeDriftMinSpeed = 5f;
@@ -288,7 +307,7 @@ namespace ArcadeKart.Core
 
         public bool IsDrifting =>
             IsDriftingActive
-            || (activeDriftEnabled
+            || (ActiveDriftEnabled
                 && CurrentDrift
                 && IsGrounded
                 && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
@@ -888,11 +907,11 @@ private void UpdateSkateRampLaunchState()
 
         private void UpdateActiveDrift()
         {
-            // Gate Inspector: se il drift attivo e' disattivato, non entra mai
-            // e se era in corso esce subito senza boost (reset pulito). Il
-            // drift passivo (Shift tenuto, grip laterale) non e' gestito qui e
-            // resta disponibile a prescindere dalla spunta.
-            if (!activeDriftEnabled)
+            // Gate oggetto: se l'oggetto di controllo non e' attivo, il drift
+            // (attivo e passivo) e' disabilitato. Qui impedisce l'ingresso nel
+            // drift attivo e, se era in corso, esce subito senza boost (reset
+            // pulito). Il drift passivo e' gated in IsDrifting.
+            if (!ActiveDriftEnabled)
             {
                 if (isDriftingActive)
                 {
