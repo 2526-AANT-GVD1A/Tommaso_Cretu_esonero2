@@ -118,6 +118,9 @@ namespace ArcadeKart.Core
         private float driftVisualLerpSpeed = 8f;
 
         [Header("Active Drift")]
+        [SerializeField, Tooltip("Abilita il drift attivo (Shift + boost + sterzo). Se disattivato resta solo il drift passivo (Shift tenuto): niente derapata carica, niente mini-turbo.")]
+        private bool activeDriftEnabled = true;
+
         [SerializeField, Tooltip("Velocita' planare minima del kart per attivare e mantenere il drift attivo (Shift + sterzo). Sotto questo valore (es. dopo un impatto col muro) il drift si interrompe, senza boost.")]
         private float activeDriftMinSpeed = 5f;
 
@@ -884,6 +887,22 @@ private void UpdateSkateRampLaunchState()
 
         private void UpdateActiveDrift()
         {
+            // Gate Inspector: se il drift attivo e' disattivato, non entra mai
+            // e se era in corso esce subito senza boost (reset pulito). Il
+            // drift passivo (Shift tenuto, grip laterale) non e' gestito qui e
+            // resta disponibile a prescindere dalla spunta.
+            if (!activeDriftEnabled)
+            {
+                if (isDriftingActive)
+                {
+                    isDriftingActive = false;
+                    driftCharge = 0f;
+                    driftEntrySpeed = 0f;
+                    isDriftCharged = false;
+                }
+                return;
+            }
+
             // FLOOR PLANARE applicato in testa (prima dell'exit-check): tira su
             // planarSpeed a >= floor SEMPRE (non piu' gated su WallContactActive).
             // Cosi' nemmeno un lieve sfregamento contro un muro/ostacolo fa
