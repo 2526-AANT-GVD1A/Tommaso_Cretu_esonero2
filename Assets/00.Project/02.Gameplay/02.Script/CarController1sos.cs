@@ -288,7 +288,8 @@ namespace ArcadeKart.Core
 
         public bool IsDrifting =>
             IsDriftingActive
-            || (CurrentDrift
+            || (activeDriftEnabled
+                && CurrentDrift
                 && IsGrounded
                 && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
                 && CurrentMove.sqrMagnitude >= driftMinSteer * driftMinSteer);
