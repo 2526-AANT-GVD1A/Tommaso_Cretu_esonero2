@@ -3,8 +3,9 @@
 // -----------------------------------------------------------------------------
 // COSA FA:
 //   Accende e spegne le "sgommate" del kart: una serie di TrailRenderer (segni
-//   neri sull'asfalto) che seguono IsDrifting, e ParticleSystem (fumo bianco)
-//   che si attivano solo a boost completamente carico (IsDriftCharged).
+//   neri sull'asfalto) che seguono IsSkidding (drift attivo o passivo, ma NON
+//   durante la finestra del boost-reward del drift), e ParticleSystem (fumo
+//   bianco) che si attivano solo a boost completamente carico (IsDriftCharged).
 // COME SI USA:
 //   1) Aggiungi questo componente da qualche parte sotto il kart (es. su un
 //      figlio "VFX"). 2) Trascina il KartController nello slot "Controller"
@@ -64,7 +65,7 @@ namespace ArcadeKart.Utility
         private void LateUpdate()
         {
             if (controller == null) return;
-            ApplyTrails(controller.IsDrifting);
+            ApplyTrails(controller.IsSkidding);
             ApplySmoke(controller.IsDriftCharged);
         }
 

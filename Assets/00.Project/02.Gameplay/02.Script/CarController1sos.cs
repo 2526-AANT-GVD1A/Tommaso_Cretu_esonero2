@@ -290,6 +290,21 @@ namespace ArcadeKart.Core
 
         public bool IsDriftCharged => isDriftCharged;
 
+        // True durante la finestra del mini-turbo di uscita dal drift carico
+        // (ApplyBoost: multiplier attivo con valore > 1). ApplySlow usa valori
+        // < 1 quindi non conta. Derivato dallo stato del multiplier coroutine:
+        // niente timer dedicato da mantenere in sync.
+        public bool IsDriftBoosting =>
+            multiplierRoutine != null && speedMultiplier > 1f;
+
+        // True quando il kart "sgomma" VISIVAMENTE (per KartSkidmarks): drift
+        // attivo, oppure drift passivo (Shift tenuto) MA non durante la
+        // finestra del boost-reward del drift. In quel caso i trail si spengono
+        // (stai boostando, non sgommando). Separato da IsDrifting per non
+        // alterare la fisica: IsDrifting resta usato dalla grip laterale.
+        public bool IsSkidding =>
+            IsDriftingActive || (IsDrifting && !IsDriftBoosting);
+
         public void ApplyBoost(float magnitude, float duration) =>
             StartMultiplier(Mathf.Max(1f, magnitude), duration);
 
