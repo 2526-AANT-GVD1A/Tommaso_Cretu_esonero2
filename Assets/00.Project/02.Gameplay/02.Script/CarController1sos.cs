@@ -16,6 +16,12 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' massima di crociera quando NON tieni premuto il tasto boost (mouse sx). Con boost (mouse sx) si raggiunge maxSpeed.")]
         private float cruiseSpeed = 12f;
 
+        [SerializeField, Tooltip("Decelerazione (unita'/sec^2) con cui il soffitto di velocita' cala da maxSpeed a cruiseSpeed quando rilasci il boost (mouse sx). Più basso = transizione più morbida (niente taglio istantaneo).")]
+        private float boostReleaseDeceleration = 8f;
+
+        [SerializeField, Tooltip("Rate di decadimento dell'eccesso di cap del drift-boost (mini-turbo) quando il multiplier scade. Esponenziale: piu' alto = il cap torna al normale piu' in fretta dopo il drift-boost. Robusto a qualsiasi activeDriftBoostMagnitude.")]
+        private float driftBoostEndDecay = 6f;
+
         [SerializeField, Tooltip("Accelerazione (unita'/sec^2).")]
         private float acceleration = 14f;
 
@@ -414,6 +420,14 @@ namespace ArcadeKart.Core
             visualYawVelocity = 0f;
             hasVisualYawDegrees = true;
 
+            // Soffitto smorzato: parte dal valore istantaneo (cruiseSpeed a
+            // spawn, boost off). Poi rampa in FixedUpdate verso EffectiveMaxSpeed.
+            currentEffectiveMax = EffectiveMaxSpeed;
+            // Soffitto combinato (cap * multiplier): all'avvio e' cruise*1.
+            currentPlanarMax = currentEffectiveMax * speedMultiplier;
+            // Nessun eccesso di drift-boost all'avvio.
+            boostExcess = 0f;
+
             // Sottoscriviamo OnImpact: usato come trigger di "crash vero" per
             // far uscire il drift attivo solo in caso di urto forte (vedi
             // impactThreshold). I lievi sfregamenti contro muri o ostacoli NON
@@ -443,8 +457,52 @@ namespace ArcadeKart.Core
             ApplyAirStabilization();
             UpdateCameraRelativeMoveDirection();
             UpdateActiveDrift();
+            UpdateEffectiveMax();
+            UpdatePlanarMax();
             UpdateSteering();
             UpdateVelocity();
+        }
+
+        // Rampa il soffitto smorzato verso EffectiveMaxSpeed. Discesa (rilascio
+        // boost) a boostReleaseDeceleration, salita (pressione boost) a
+        // acceleration. Cosi' il clamp planare in UpdateVelocity segue un
+        // valore che scende dolcemente invece di tagliare 22->12 in un frame.
+        private void UpdateEffectiveMax()
+        {
+            float target = EffectiveMaxSpeed;
+            float rate = (target < currentEffectiveMax)
+                ? boostReleaseDeceleration
+                : acceleration;
+            currentEffectiveMax = Mathf.MoveTowards(
+                currentEffectiveMax,
+                target,
+                rate * Time.fixedDeltaTime
+            );
+        }
+
+        // Rampa il soffitto planare COMBINATO (currentEffectiveMax + boostExcess).
+        // L'eccesso e' la parte di cap sopra currentEffectiveMax dovuta al
+        // speedMultiplier (drift-boost reward). Salita ISTANTANEA: quando il
+        // multiplier sale (inizio drift-boost) l'eccesso scatta subito, cosi'
+        // il kick non viene imbrigliato. Discesa ESPONENZIALE rapida
+        // (driftBoostEndDecay): smorza il hard-cut quando il mini-turbo scade,
+        // riportando il cap al normale in fretta, robusto a qualsiasi magnitude.
+        // Separato da boostReleaseDeceleration (che governa solo il rilascio mouse
+        // su currentEffectiveMax). Firmato: mult<1 (slow pad) = eccesso negativo.
+        private void UpdatePlanarMax()
+        {
+            float targetExcess = currentEffectiveMax * (speedMultiplier - 1f);
+            if (targetExcess >= boostExcess)
+                boostExcess = targetExcess;
+            else
+                boostExcess = Mathf.Lerp(
+                    boostExcess,
+                    targetExcess,
+                    1f - Mathf.Exp(-driftBoostEndDecay * Time.fixedDeltaTime)
+                );
+            if (Mathf.Abs(targetExcess) < 0.001f && Mathf.Abs(boostExcess) < 0.05f)
+                boostExcess = 0f;
+            currentPlanarMax = currentEffectiveMax + boostExcess;
         }
 
         private void LateUpdate()
@@ -599,6 +657,28 @@ namespace ArcadeKart.Core
         // calcolava target/planarMax con maxSpeed (UpdateVelocity/UpdateSteering).
         private float EffectiveMaxSpeed =>
             CurrentBoost ? maxSpeed : cruiseSpeed;
+
+        // Soffitto di velocita' "smorzato": rampa dolcemente verso
+        // EffectiveMaxSpeed invece di saltare. Evita il taglio istantaneo del
+        // clamp planare quando rilasci il boost (mouse sx). Discesa a
+        // boostReleaseDeceleration, salita a acceleration. E' il valore
+        // effettivamente usato come cap/target in UpdateVelocity/UpdateSteering.
+        private float currentEffectiveMax;
+
+        // Soffitto planare COMBINATO smorzato = currentEffectiveMax * speedMultiplier.
+        // Smorza anche il hard-cut del multiplier del drift-boost reward (1.5 -> 1
+        // alla fine del mini-turbo), che currentEffectiveMax da solo non copre.
+        // Salita istantanea (non annacqua il kick del drift boost), discesa a
+        // boostReleaseDeceleration. Usato come cap/target effettivo in UpdateVelocity.
+        private float currentPlanarMax;
+
+        // Eccesso di cap sopra currentEffectiveMax, derivante dal speedMultiplier
+        // (drift-boost reward). Smorzato con decadimento ESPONENZIALE rapido
+        // (driftBoostEndDecay), separato dal boostReleaseDeceleration (che governa
+        // solo il rilascio mouse). Cosi' il cap torna normale in fretta dopo il
+        // drift-boost, anche con activeDriftBoostMagnitude alto. Firmato: gestisce
+        // anche mult<1 (slow pad) come eccesso negativo.
+        private float boostExcess;
 
         private bool CurrentDrift =>
             ControlsEnabled && input != null && input.Drift;
@@ -1118,7 +1198,7 @@ private void UpdateSkateRampLaunchState()
 
             float normalizedTurnInput = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
 
-            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, EffectiveMaxSpeed));
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, currentEffectiveMax));
             // In modalita' AI usiamo sempre turnFactor 1: niente riduzione
             // turnAtRest a bassa velocita', cosi' il NPC sterza a rate pieno
             // verso la direzione desiderata anche da fermo o in manovra.
@@ -1182,7 +1262,7 @@ private void UpdateSkateRampLaunchState()
             float verticalSpeed = rb.linearVelocity.y;
 
             float absAngle = Mathf.Abs(currentSignedAngleToDesired);
-            float targetForwardSpeed = desiredMoveAmount * EffectiveMaxSpeed * speedMultiplier;
+            float targetForwardSpeed = desiredMoveAmount * currentPlanarMax;
 
             if (isDriftingActive)
             {
@@ -1204,7 +1284,7 @@ private void UpdateSkateRampLaunchState()
                 }
                 else if (isReorientingWhileMoving && absAngle > movingReorientationExitAngle)
                 {
-                    float limitedTarget = desiredMoveAmount * EffectiveMaxSpeed * speedMultiplier * movingReorientationAccelerationFactor;
+                    float limitedTarget = desiredMoveAmount * currentPlanarMax * movingReorientationAccelerationFactor;
                     targetForwardSpeed = limitedTarget;
                 }
             }
@@ -1246,7 +1326,7 @@ private void UpdateSkateRampLaunchState()
                 lateralFriction = driftLateralFriction;
             }
 
-            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, EffectiveMaxSpeed));
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, currentEffectiveMax));
 
             // Il drift attivo ha la sua grip dedicata: lo slip multiplier del
             // "carrello della spesa" non deve intervenire (abbasserebbe di nuovo
@@ -1363,7 +1443,7 @@ private void UpdateSkateRampLaunchState()
 
             Vector3 planarFinal = finalVelocity;
             planarFinal.y = 0f;
-            float planarMax = EffectiveMaxSpeed * speedMultiplier;
+            float planarMax = currentPlanarMax;
 
             if (planarFinal.magnitude > planarMax)
             {
