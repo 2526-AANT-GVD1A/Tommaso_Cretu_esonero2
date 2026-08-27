@@ -72,6 +72,11 @@ namespace ArcadeKart.Core
         /// <summary>True while the drift button is held down (per "sgommata" intenzionale).</summary>
         public bool Drift { get; private set; }
 
+        // True mentre il tasto boost (mouse sinistro) e' tenuto premuto.
+        // Letto direttamente dal device Mouse (vedi Update): niente action da
+        // cablare nella scena, il mouse e' l'unico device che lo attiva.
+        public bool Boost { get; private set; }
+
         /// <summary>True only on the single frame the reset button is pressed.</summary>
         public bool ResetPressed { get; private set; }
 
@@ -114,6 +119,11 @@ namespace ArcadeKart.Core
             Move = (moveAction != null) ? moveAction.action.ReadValue<Vector2>() : Vector2.zero;
             Brake = (brakeAction != null) && brakeAction.action.IsPressed();
             Drift = (driftAction != null) && driftAction.action.IsPressed();
+
+            // Boost: tasto sinistro del mouse. Letto diretto dal device
+            // (Mouse.current e' null se non c'e' mouse -> false). Gated dal
+            // KartController via ControlsEnabled, come Move/Brake/Drift.
+            Boost = Mouse.current != null && Mouse.current.leftButton.isPressed;
 
             // WasPressedThisFrame e' true solo nel frame della pressione:
             // perfetto per evitare di chiamare il respawn ogni frame.

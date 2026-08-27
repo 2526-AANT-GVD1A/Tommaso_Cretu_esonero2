@@ -13,6 +13,9 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' massima in unita'/secondo.")]
         private float maxSpeed = 22f;
 
+        [SerializeField, Tooltip("Velocita' massima di crociera quando NON tieni premuto il tasto boost (mouse sx). Con boost (mouse sx) si raggiunge maxSpeed.")]
+        private float cruiseSpeed = 12f;
+
         [SerializeField, Tooltip("Accelerazione (unita'/sec^2).")]
         private float acceleration = 14f;
 
@@ -571,6 +574,17 @@ namespace ArcadeKart.Core
         private bool CurrentBrake =>
             ControlsEnabled && input != null && input.Brake;
 
+        // Boost (mouse sx): alza il soffitto di velocita' da cruiseSpeed a
+        // maxSpeed. Gated da ControlsEnabled come gli altri input, cosi' a
+        // menu/disattivato non resta appeso.
+        private bool CurrentBoost =>
+            ControlsEnabled && input != null && input.Boost;
+
+        // Soffitto di velocita' effettivo in base al boost. Usato ovunque si
+        // calcolava target/planarMax con maxSpeed (UpdateVelocity/UpdateSteering).
+        private float EffectiveMaxSpeed =>
+            CurrentBoost ? maxSpeed : cruiseSpeed;
+
         private bool CurrentDrift =>
             ControlsEnabled && input != null && input.Drift;
         private Coroutine multiplierRoutine;
@@ -1082,7 +1096,7 @@ private void UpdateSkateRampLaunchState()
 
             float normalizedTurnInput = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
 
-            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, EffectiveMaxSpeed));
             // In modalita' AI usiamo sempre turnFactor 1: niente riduzione
             // turnAtRest a bassa velocita', cosi' il NPC sterza a rate pieno
             // verso la direzione desiderata anche da fermo o in manovra.
@@ -1146,7 +1160,7 @@ private void UpdateSkateRampLaunchState()
             float verticalSpeed = rb.linearVelocity.y;
 
             float absAngle = Mathf.Abs(currentSignedAngleToDesired);
-            float targetForwardSpeed = desiredMoveAmount * maxSpeed * speedMultiplier;
+            float targetForwardSpeed = desiredMoveAmount * EffectiveMaxSpeed * speedMultiplier;
 
             if (isDriftingActive)
             {
@@ -1168,7 +1182,7 @@ private void UpdateSkateRampLaunchState()
                 }
                 else if (isReorientingWhileMoving && absAngle > movingReorientationExitAngle)
                 {
-                    float limitedTarget = desiredMoveAmount * maxSpeed * speedMultiplier * movingReorientationAccelerationFactor;
+                    float limitedTarget = desiredMoveAmount * EffectiveMaxSpeed * speedMultiplier * movingReorientationAccelerationFactor;
                     targetForwardSpeed = limitedTarget;
                 }
             }
@@ -1210,7 +1224,7 @@ private void UpdateSkateRampLaunchState()
                 lateralFriction = driftLateralFriction;
             }
 
-            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, maxSpeed));
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, EffectiveMaxSpeed));
 
             // Il drift attivo ha la sua grip dedicata: lo slip multiplier del
             // "carrello della spesa" non deve intervenire (abbasserebbe di nuovo
@@ -1327,7 +1341,7 @@ private void UpdateSkateRampLaunchState()
 
             Vector3 planarFinal = finalVelocity;
             planarFinal.y = 0f;
-            float planarMax = maxSpeed * speedMultiplier;
+            float planarMax = EffectiveMaxSpeed * speedMultiplier;
 
             if (planarFinal.magnitude > planarMax)
             {

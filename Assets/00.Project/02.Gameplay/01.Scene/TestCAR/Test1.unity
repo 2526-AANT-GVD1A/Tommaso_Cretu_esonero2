@@ -17819,6 +17819,8 @@ MonoBehaviour:
   wanderArrivalRadius: 1.5
   edgeMargin: 2
   wanderTimeout: 10
+  stuckTimeout: 2
+  stuckSpeedThreshold: 0.5
   fallFailsafeDepth: 10
   touchThreshold: 1
   wallTouchCooldown: 0.3
@@ -17878,6 +17880,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxSpeed: 10
+  cruiseSpeed: 12
   acceleration: 10
   deceleration: 10
   reverseSpeed: 0
@@ -23476,6 +23479,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxSpeed: 10
+  cruiseSpeed: 3
   acceleration: 10
   deceleration: 10
   reverseSpeed: 0

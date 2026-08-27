@@ -110,6 +110,8 @@ namespace ArcadeKart.Gameplay
         public Vector2 Move => move;
         public bool Brake => brake;
         public bool Drift => drift;
+        // Il NPC non usa il boost (mouse del giocatore): sempre false.
+        public bool Boost => false;
         // Il NPC non usa il reset/respawn del giocatore.
         public bool ResetPressed => false;
 

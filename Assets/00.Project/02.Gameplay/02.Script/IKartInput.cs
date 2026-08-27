@@ -24,6 +24,10 @@ namespace ArcadeKart.Core
         // True mentre il tasto drift e' tenuto premuto (sgommata intenzionale).
         bool Drift { get; }
 
+        // True mentre il tasto boost e' tenuto premuto (mouse sx per il
+        // giocatore): alza la velocita' massima da cruiseSpeed a maxSpeed.
+        bool Boost { get; }
+
         // True solo nel frame di pressione del tasto reset/respawn.
         bool ResetPressed { get; }
     }
