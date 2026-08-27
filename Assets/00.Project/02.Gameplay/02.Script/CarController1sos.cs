@@ -822,6 +822,7 @@ private void UpdateSkateRampLaunchState()
             float angleToJoystick = Mathf.Abs(currentSignedAngleToDesired);
             float moveX = CurrentMove.x;
             bool driftHeld = CurrentDrift;
+            bool boostHeld = CurrentBoost;
             bool wallContact = WallContactActive;
 
             if (isDriftingActive)
@@ -835,6 +836,9 @@ private void UpdateSkateRampLaunchState()
 
                 bool lostGround = (Time.time - driftLastGroundedTime) > activeDriftExitGraceTime;
                 bool releasedDrift = !driftHeld;
+                // Rilascio del mouse (boost) fa uscire subito il drift attivo,
+                // come il rilascio di Shift: il drift attivo e' "boost-gated".
+                bool releasedBoost = !boostHeld;
                 // Crash vero: gestito da OnImpact (urto >= impactThreshold).
                 // pendingCrashExit e' settato in HandleKartImpact e consumato qui.
                 // I lievi sfregamenti (sotto threshold) NON causano uscita: il
@@ -842,16 +846,16 @@ private void UpdateSkateRampLaunchState()
                 bool hardCrash = pendingCrashExit;
                 pendingCrashExit = false;
 
-                if (lostGround || releasedDrift || hardCrash)
+                if (lostGround || releasedDrift || releasedBoost || hardCrash)
                 {
                     // Uscita INTELLIGENTE:
-                    //  - Rilascio Shift con carica completata -> ApplyBoost
-                    //    (singola fase, magnitude/duration fissi).
+                    //  - Rilascio Shift o del mouse (boost) con carica completata
+                    //    -> ApplyBoost (singola fase, magnitude/duration fissi).
                     //  - Crash (OnImpact forte) o salto prolungato ->
                     //    reset senza boost. isDriftCharged decide se boostare,
                     //    NON driftCharge direttamente, cosi' il boost si ha
                     //    solo se hai sterzato abbastanza a lungo.
-                    if (releasedDrift && isDriftCharged)
+                    if ((releasedDrift || releasedBoost) && isDriftCharged)
                     {
                         ApplyBoost(activeDriftBoostMagnitude, activeDriftBoostDuration);
 
@@ -921,8 +925,11 @@ private void UpdateSkateRampLaunchState()
                 // re-entry e' negata finche' la planarSpeed non ripassa nello
                 // stesso emisfero del muso. Previene il "drift attivo all'indietro"
                 // visto dopo le uscite brevi.
+                // Inoltre richiede il boost (mouse sx) oltre a Shift: il drift
+                // attivo e' "boost-gated", si attiva solo mentre boosti.
                 bool canEnter =
                     driftHeld
+                    && boostHeld
                     && IsGrounded
                     && planarSpeed >= activeDriftMinSpeed
                     && Mathf.Abs(moveX) >= activeDriftMinSteer
