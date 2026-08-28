@@ -6,9 +6,10 @@ namespace ArcadeKart.Gameplay
     /// <summary>
     /// Anima gli arti del personaggio dentro il kart.
     /// Ogni arto e' una linea (LineRenderer) a 3 punti:
-    /// partenza (spalla/anca, ancorata al busto 2D) -> punto centrale (gomito/ginocchio, calcolato via script) -> arrivo (mano/piede, ancorata al kart).
-    /// Le gambe oscillano in base alla velocita' del kart per simulare la pedalata:
-    /// a kart fermo restano ferme, piu' il kart corre e piu' la pedalata e' rapida ed ampia.
+    /// partenza (spalla/anca) -> punto centrale (gomito/ginocchio, calcolato via script) -> arrivo (mano/piede).
+    /// Le gambe simulano una camminata/corsa in base alla velocita' del kart:
+    /// il piede percorre un arco (scivola di lato e si alza nella meta' "in aria" del ciclo) e il ginocchio lo segue.
+    /// A kart fermo tutto torna fermo sulle ancore; piu' il kart corre, piu' il passo e' rapido ed ampio.
     /// </summary>
     [DefaultExecutionOrder(200)] // dopo KartController e SpriteBillboard: le ancore sono gia' aggiornate nel frame
     public class ArtiPersonaggio : MonoBehaviour
@@ -63,6 +64,10 @@ namespace ArcadeKart.Gameplay
         [SerializeField] private float frequenzaMassima = 3.5f;
         [Tooltip("Escursione massima del ginocchio durante la pedalata, in metri.")]
         [SerializeField] private float ampiezzaMassima = 0.045f;
+        [Tooltip("Escursione laterale del piede durante il passo, in metri.")]
+        [SerializeField] private float ampiezzaPasso = 0.03f;
+        [Tooltip("Quanto si alza il piede nella fase in aria del passo, in metri.")]
+        [SerializeField] private float ampiezzaAlzo = 0.035f;
 
         // Fase corrente della pedalata, espressa in giri (0-1).
         private float fase;
@@ -93,12 +98,21 @@ namespace ArcadeKart.Gameplay
                 ? (cam.transform.position - transform.position).normalized
                 : Vector3.forward;
 
+            // Base visibile a schermo, calcolata una volta per frame:
+            // suSchermo = verticale proiettata sul piano perpendicolare alla camera,
+            // destraSchermo = orizzontale a schermo (perpendicolare a entrambe).
+            Vector3 suSchermo = ProiettaSuSchermo(Vector3.up, versoCamera);
+            suSchermo = suSchermo.sqrMagnitude > 0.001f
+                ? suSchermo.normalized
+                : ProiettaSuSchermo(Vector3.forward, versoCamera).normalized;
+            Vector3 destraSchermo = Vector3.Cross(suSchermo, versoCamera).normalized;
+
             DisegnaBraccio(braccioSinistro, versoCamera);
             DisegnaBraccio(braccioDestro, versoCamera);
             float sfasamentoSX = gambaSinistra != null ? gambaSinistra.sfasamento : 0f;
             float sfasamentoDX = gambaDestra != null ? gambaDestra.sfasamento : 0.5f;
-            DisegnaGamba(gambaSinistra, versoCamera, velocita01, fase + sfasamentoSX);
-            DisegnaGamba(gambaDestra, versoCamera, velocita01, fase + sfasamentoDX);
+            DisegnaGamba(gambaSinistra, versoCamera, suSchermo, destraSchermo, velocita01, fase + sfasamentoSX);
+            DisegnaGamba(gambaDestra, versoCamera, suSchermo, destraSchermo, velocita01, fase + sfasamentoDX);
         }
 
         /// <summary>Braccio: spalla -> gomito (punto medio piegato) -> mano.</summary>
@@ -116,23 +130,39 @@ namespace ArcadeKart.Gameplay
             arto.linea.SetPosition(2, arrivo);
         }
 
-        /// <summary>Gamba: anca -> ginocchio (punto medio piegato e in oscillazione) -> piede.</summary>
-        private void DisegnaGamba(Gamba gamba, Vector3 versoCamera, float velocita01, float faseGamba)
+        /// <summary>
+        /// Gamba: anca -> ginocchio -> piede. Il piede percorre un arco a mezz'aria:
+        /// scivola di lato mentre e' sollevato (meta' "in aria" del ciclo) e torna appoggiato nell'altra meta'.
+        /// Il ginocchio segue il piede animato e si alza in sincrono con lui.
+        /// </summary>
+        private void DisegnaGamba(Gamba gamba, Vector3 versoCamera, Vector3 suSchermo, Vector3 destraSchermo, float velocita01, float faseGamba)
         {
             if (!Valido(gamba)) return;
 
-            Vector3 partenza = gamba.partenza.position;
-            Vector3 arrivo = gamba.arrivo.position;
-            Vector3 suSchermo = DirezioneVisibile(arrivo - partenza, versoCamera);
+            Vector3 anca = gamba.partenza.position;
+            Vector3 piedeBase = gamba.arrivo.position;
 
-            // Il ginocchio oscilla lungo la direzione visibile a schermo: cosi' la pedalata si vede da qualunque angolo.
-            float oscillazione = Mathf.Sin(faseGamba * Mathf.PI * 2f) * ampiezzaMassima * velocita01;
-            Vector3 ginocchio = Vector3.Lerp(partenza, arrivo, 0.5f)
-                + suSchermo * (gamba.curvatura + oscillazione);
+            // Arco del passo: lo scorrimento laterale e' continuo, l'alzo esiste solo nella meta' in aria (arco semicircolare).
+            float angolo = faseGamba * Mathf.PI * 2f;
+            Vector3 piedeAnimato = piedeBase
+                + destraSchermo * (Mathf.Cos(angolo) * ampiezzaPasso * velocita01)
+                + suSchermo * (Mathf.Max(0f, Mathf.Sin(angolo)) * ampiezzaAlzo * velocita01);
 
-            gamba.linea.SetPosition(0, partenza);
+            // Il ginocchio e' il punto medio tra anca e piede animato, con alzo sincronizzato al piede.
+            Vector3 suGinocchio = DirezioneVisibile(piedeAnimato - anca, versoCamera);
+            float alzoGinocchio = Mathf.Max(0f, Mathf.Sin(angolo)) * ampiezzaMassima * velocita01;
+            Vector3 ginocchio = Vector3.Lerp(anca, piedeAnimato, 0.5f)
+                + suGinocchio * (gamba.curvatura + alzoGinocchio);
+
+            gamba.linea.SetPosition(0, anca);
             gamba.linea.SetPosition(1, ginocchio);
-            gamba.linea.SetPosition(2, arrivo);
+            gamba.linea.SetPosition(2, piedeAnimato);
+        }
+
+        /// <summary>Proietta un vettore sul piano perpendicolare alla direzione di vista.</summary>
+        private static Vector3 ProiettaSuSchermo(Vector3 vettore, Vector3 versoCamera)
+        {
+            return vettore - versoCamera * Vector3.Dot(vettore, versoCamera);
         }
 
         /// <summary>

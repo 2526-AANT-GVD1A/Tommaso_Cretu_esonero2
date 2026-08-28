@@ -19597,6 +19597,8 @@ MonoBehaviour:
     sfasamento: 0.5
   frequenzaMassima: 3.5
   ampiezzaMassima: 0.045
+  ampiezzaPasso: 0.03
+  ampiezzaAlzo: 0.035
 --- !u!1 &910000010
 GameObject:
   m_ObjectHideFlags: 0
