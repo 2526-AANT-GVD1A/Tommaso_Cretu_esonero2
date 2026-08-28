@@ -6171,7 +6171,7 @@ GameObject:
   - component: {fileID: 267760749}
   - component: {fileID: 267760750}
   m_Layer: 9
-  m_Name: CollisioniMURI
+  m_Name: Collisioni_MURI
   m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -17881,6 +17881,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxSpeed: 10
   cruiseSpeed: 12
+  boostReleaseDeceleration: 8
+  driftBoostEndDecay: 6
   acceleration: 10
   deceleration: 10
   reverseSpeed: 0
@@ -17909,6 +17911,7 @@ MonoBehaviour:
   driftVisual: {fileID: 981644902}
   driftVisualYawDegrees: 25
   driftVisualLerpSpeed: 8
+  activeDriftToggleObjects: []
   activeDriftMinSpeed: 1
   activeDriftMinSteer: 0.35
   activeDriftLateralFriction: 3
@@ -19805,6 +19808,38 @@ CapsuleCollider:
   m_Height: 1
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0.118808955}
+--- !u!1 &962787917
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 962787918}
+  m_Layer: 7
+  m_Name: Personaggio
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &962787918
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 962787917}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1460786856}
+  m_Father: {fileID: 1715983992}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &967314590
 GameObject:
   m_ObjectHideFlags: 0
@@ -20068,7 +20103,7 @@ GameObject:
   - component: {fileID: 978295066}
   - component: {fileID: 978295065}
   m_Layer: 7
-  m_Name: Cube
+  m_Name: Base_modello_kart
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -23480,6 +23515,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxSpeed: 10
   cruiseSpeed: 3
+  boostReleaseDeceleration: 8
+  driftBoostEndDecay: 6
   acceleration: 10
   deceleration: 10
   reverseSpeed: 0
@@ -23508,6 +23545,7 @@ MonoBehaviour:
   driftVisual: {fileID: 1715983992}
   driftVisualYawDegrees: 25
   driftVisualLerpSpeed: 8
+  activeDriftToggleObjects: []
   activeDriftMinSpeed: 1
   activeDriftMinSteer: 0.35
   activeDriftLateralFriction: 3
@@ -23818,7 +23856,7 @@ GameObject:
   - component: {fileID: 1460786858}
   - component: {fileID: 1460786857}
   m_Layer: 7
-  m_Name: chbase1
+  m_Name: Base2D
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -23832,12 +23870,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1460786855}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.157, z: -0.365}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.157, z: -0.36500007}
   m_LocalScale: {x: 0.12, y: 0.12, z: 0.12}
   m_ConstrainProportionsScale: 1
   m_Children: []
-  m_Father: {fileID: 1715983992}
+  m_Father: {fileID: 962787918}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1460786857
 MonoBehaviour:
@@ -25770,8 +25808,8 @@ Transform:
   - {fileID: 1241743229}
   - {fileID: 267760749}
   - {fileID: 1555869357}
-  - {fileID: 1460786856}
   - {fileID: 1112894868}
+  - {fileID: 962787918}
   m_Father: {fileID: 1433482426}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1722155022
