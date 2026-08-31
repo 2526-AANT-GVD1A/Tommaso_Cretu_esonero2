@@ -10,8 +10,11 @@ namespace ArcadeKart.Gameplay
     /// Le gambe simulano una camminata/corsa in base alla velocita' del kart:
     /// il piede percorre un arco (scivola di lato e si alza nella meta' "in aria" del ciclo) e il ginocchio lo segue.
     /// A kart fermo tutto torna fermo sulle ancore; piu' il kart corre, piu' il passo e' rapido ed ampio.
+    /// Il verso del passo segue la direzione di movimento del kart vista da camera (niente moonwalk).
+    /// Grazie a [ExecuteAlways] e all'anteprima in editor, i parametri si regolano in diretta dall'inspector.
     /// </summary>
     [DefaultExecutionOrder(200)] // dopo KartController e SpriteBillboard: le ancore sono gia' aggiornate nel frame
+    [ExecuteAlways] // gira anche in edit mode: le linee si ridisegnano mentre si muovono gli slider
     public class ArtiPersonaggio : MonoBehaviour
     {
         [System.Serializable]
@@ -69,12 +72,27 @@ namespace ArcadeKart.Gameplay
         [Tooltip("Quanto si alza il piede nella fase in aria del passo, in metri.")]
         [SerializeField] private float ampiezzaAlzo = 0.035f;
 
+        [Header("Direzione passo")]
+        [Tooltip("Velocita' minima del kart (m/s) per invertire il verso del passo; sotto soglia resta l'ultimo verso (anti-jitter).")]
+        [SerializeField] private float sogliaDirezione = 0.5f;
+
+        [Header("Anteprima in editor")]
+        [Tooltip("Solo in edit mode: velocita' simulata (0-1) per vedere la camminata nella Scene view mentre si regola l'inspector. Ignorata in Play.")]
+        [Range(0f, 1f)] [SerializeField] private float velocitaAnteprima = 0.6f;
+
         // Fase corrente della pedalata, espressa in giri (0-1).
         private float fase;
+
+        // Rigidbody del kart: serve la velocita' mondo per capire verso dove il personaggio "cammina" sullo schermo.
+        private Rigidbody rbKart;
+
+        // Verso corrente dello scorrimento del passo: +1 o -1 secondo la direzione di movimento vista da camera.
+        private float versoPasso = 1f;
 
         private void Awake()
         {
             if (kart == null) kart = GetComponentInParent<KartController>();
+            if (kart != null) rbKart = kart.GetComponent<Rigidbody>();
 
             Prepara(braccioSinistro, spessoreBraccia, "Linea_BraccioSX");
             Prepara(braccioDestro, spessoreBraccia, "Linea_BraccioDX");
@@ -88,31 +106,68 @@ namespace ArcadeKart.Gameplay
             float velocita = kart != null ? Mathf.Abs(kart.CurrentSpeed) : 0f;
             float massima = (kart != null && kart.MaxSpeed > 0.01f) ? kart.MaxSpeed : 1f;
             float velocita01 = Mathf.Clamp01(velocita / massima);
+            float dt = Time.deltaTime;
+            bool inEditor = !Application.isPlaying;
+
+#if UNITY_EDITOR
+            // In edit mode l'anteprima sostituisce la velocita' reale (il kart e' sempre fermo fuori dal Play).
+            if (inEditor)
+            {
+                velocita01 = velocitaAnteprima;
+                if (velocitaAnteprima > 0f) UnityEditor.EditorApplication.QueuePlayerLoopUpdate(); // refresh continuo della Scene view
+            }
+#endif
 
             // La fase avanza solo in movimento: kart fermo = gambe ferme.
-            fase = Mathf.Repeat(fase + frequenzaMassima * velocita01 * Time.deltaTime, 1f);
+            fase = Mathf.Repeat(fase + frequenzaMassima * velocita01 * dt, 1f);
 
-            // Verso della camera rispetto al personaggio: serve per rendere le pieghe visibili da ogni angolo.
+            // Verso della camera: in Play la game camera, in editor la Scene view (anteprima fedele all'angolo in uso).
             Camera cam = Camera.main;
+#if UNITY_EDITOR
+            if (inEditor && UnityEditor.SceneView.lastActiveSceneView != null && UnityEditor.SceneView.lastActiveSceneView.camera != null)
+                cam = UnityEditor.SceneView.lastActiveSceneView.camera;
+#endif
             Vector3 versoCamera = cam != null
                 ? (cam.transform.position - transform.position).normalized
                 : Vector3.forward;
 
             // Base visibile a schermo, calcolata una volta per frame:
             // suSchermo = verticale proiettata sul piano perpendicolare alla camera,
-            // destraSchermo = orizzontale a schermo (perpendicolare a entrambe).
+            // lateraleSchermo = asse orizzontale a schermo, perpendicolare a vista e verticale
+            // (con la camera dietro il kart punta verso sinistra dello schermo).
             Vector3 suSchermo = ProiettaSuSchermo(Vector3.up, versoCamera);
             suSchermo = suSchermo.sqrMagnitude > 0.001f
                 ? suSchermo.normalized
                 : ProiettaSuSchermo(Vector3.forward, versoCamera).normalized;
-            Vector3 destraSchermo = Vector3.Cross(suSchermo, versoCamera).normalized;
+            Vector3 lateraleSchermo = Vector3.Cross(suSchermo, versoCamera).normalized;
+
+            // Verso del passo: segue la direzione di movimento reale del kart proiettata sull'asse orizzontale dello schermo.
+            if (rbKart != null)
+            {
+                Vector3 velocitaMondo = rbKart.linearVelocity;
+                if (velocitaMondo.sqrMagnitude > sogliaDirezione * sogliaDirezione)
+                {
+                    // Il piede "in aria" (che definisce il verso della camminata) si muove verso -lateraleSchermo * verso:
+                    // per camminare nella direzione di movimento il verso deve essere l'OPPOSTO del segno di
+                    // Dot(velocita', lateraleSchermo), perche' lateraleSchermo punta a sinistra dello schermo.
+                    float versoObiettivo = Vector3.Dot(velocitaMondo, lateraleSchermo) >= 0f ? -1f : 1f;
+                    // Virata dolce: passando per 0 i piedi rientrano al centro invece di specchiarsi di scatto.
+                    versoPasso = Mathf.MoveTowards(versoPasso, versoObiettivo, 6f * dt);
+                }
+            }
+
+            // Aspetto linee riapplicato ogni frame: spessore, materiale e sorting restano modificabili live dall'inspector.
+            ApplicaAspetto(braccioSinistro, spessoreBraccia);
+            ApplicaAspetto(braccioDestro, spessoreBraccia);
+            ApplicaAspetto(gambaSinistra, spessoreGambe);
+            ApplicaAspetto(gambaDestra, spessoreGambe);
 
             DisegnaBraccio(braccioSinistro, versoCamera);
             DisegnaBraccio(braccioDestro, versoCamera);
             float sfasamentoSX = gambaSinistra != null ? gambaSinistra.sfasamento : 0f;
             float sfasamentoDX = gambaDestra != null ? gambaDestra.sfasamento : 0.5f;
-            DisegnaGamba(gambaSinistra, versoCamera, suSchermo, destraSchermo, velocita01, fase + sfasamentoSX);
-            DisegnaGamba(gambaDestra, versoCamera, suSchermo, destraSchermo, velocita01, fase + sfasamentoDX);
+            DisegnaGamba(gambaSinistra, versoCamera, suSchermo, lateraleSchermo, velocita01, fase + sfasamentoSX);
+            DisegnaGamba(gambaDestra, versoCamera, suSchermo, lateraleSchermo, velocita01, fase + sfasamentoDX);
         }
 
         /// <summary>Braccio: spalla -> gomito (punto medio piegato) -> mano.</summary>
@@ -133,9 +188,10 @@ namespace ArcadeKart.Gameplay
         /// <summary>
         /// Gamba: anca -> ginocchio -> piede. Il piede percorre un arco a mezz'aria:
         /// scivola di lato mentre e' sollevato (meta' "in aria" del ciclo) e torna appoggiato nell'altra meta'.
+        /// Lo scorrimento laterale segue versoPasso, cioe' la direzione di movimento del kart vista da camera.
         /// Il ginocchio segue il piede animato e si alza in sincrono con lui.
         /// </summary>
-        private void DisegnaGamba(Gamba gamba, Vector3 versoCamera, Vector3 suSchermo, Vector3 destraSchermo, float velocita01, float faseGamba)
+        private void DisegnaGamba(Gamba gamba, Vector3 versoCamera, Vector3 suSchermo, Vector3 lateraleSchermo, float velocita01, float faseGamba)
         {
             if (!Valido(gamba)) return;
 
@@ -145,7 +201,7 @@ namespace ArcadeKart.Gameplay
             // Arco del passo: lo scorrimento laterale e' continuo, l'alzo esiste solo nella meta' in aria (arco semicircolare).
             float angolo = faseGamba * Mathf.PI * 2f;
             Vector3 piedeAnimato = piedeBase
-                + destraSchermo * (Mathf.Cos(angolo) * ampiezzaPasso * velocita01)
+                + lateraleSchermo * (Mathf.Cos(angolo) * ampiezzaPasso * velocita01 * versoPasso)
                 + suSchermo * (Mathf.Max(0f, Mathf.Sin(angolo)) * ampiezzaAlzo * velocita01);
 
             // Il ginocchio e' il punto medio tra anca e piede animato, con alzo sincronizzato al piede.
@@ -190,7 +246,7 @@ namespace ArcadeKart.Gameplay
         }
 
         /// <summary>
-        /// Crea (o riusa) il LineRenderer di un arto e ne fissa le impostazioni grafiche.
+        /// Crea (o riusa) il LineRenderer di un arto e ne fissa le impostazioni strutturali.
         /// Nome deterministico: se esiste gia' un figlio con lo stesso nome viene riusato.
         /// </summary>
         private void Prepara(Arto arto, float spessore, string nomeLinea)
@@ -214,16 +270,10 @@ namespace ArcadeKart.Gameplay
             linea.positionCount = 3;
             linea.useWorldSpace = true;
             linea.alignment = LineAlignment.View; // la linea si volge sempre verso la camera
-            linea.widthCurve = AnimationCurve.Constant(0f, 1f, 1f);
-            linea.widthMultiplier = spessore;
             linea.numCapVertices = 2; // punte arrotondate
             linea.numCornerVertices = 0;
-            linea.startColor = Color.black;
-            linea.endColor = Color.black;
-            if (materialeLinea != null) linea.sharedMaterial = materialeLinea;
-            linea.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            linea.receiveShadows = false;
-            linea.sortingOrder = ordineSorting;
+
+            ApplicaAspetto(arto, spessore);
 
             // Aggiorna subito i punti cosi' la linea e' visibile anche fuori dal Play Mode.
             if (arto.partenza != null && arto.arrivo != null)
@@ -232,6 +282,25 @@ namespace ArcadeKart.Gameplay
                 linea.SetPosition(1, arto.partenza.position);
                 linea.SetPosition(2, arto.arrivo.position);
             }
+        }
+
+        /// <summary>
+        /// Impostazioni grafiche delle linee, riapplicate a ogni LateUpdate:
+        /// cosi' spessore, materiale e ordine di sorting sono modificabili in diretta dall'inspector.
+        /// </summary>
+        private void ApplicaAspetto(Arto arto, float spessore)
+        {
+            if (!Valido(arto)) return;
+
+            var linea = arto.linea;
+            linea.widthCurve = AnimationCurve.Constant(0f, 1f, 1f);
+            linea.widthMultiplier = spessore;
+            linea.startColor = Color.black;
+            linea.endColor = Color.black;
+            if (materialeLinea != null) linea.sharedMaterial = materialeLinea;
+            linea.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            linea.receiveShadows = false;
+            linea.sortingOrder = ordineSorting;
         }
 
 #if UNITY_EDITOR
