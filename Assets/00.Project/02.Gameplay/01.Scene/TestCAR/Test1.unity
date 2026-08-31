@@ -19604,7 +19604,6 @@ MonoBehaviour:
   ampiezzaAlzoCorsa: 0.2
   ampiezzaMassima: 0
   sogliaDirezione: 0.5
-  anteprimaCorsa: 1
 --- !u!1 &910000010
 GameObject:
   m_ObjectHideFlags: 0
@@ -19684,7 +19683,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.34624034, y: 1.2361431, z: 0.088762686}
+  - {x: -0.3299314, y: 1.2290616, z: 0.11419826}
   - {x: -0.26599994, y: 1.3933, z: 0.10000029}
   m_Parameters:
     serializedVersion: 3
@@ -19833,7 +19832,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.331025, y: 1.2310767, z: -0.12680385}
+  - {x: -0.33085763, y: 1.2290554, z: -0.108960405}
   - {x: -0.26600015, y: 1.3933, z: -0.099999726}
   m_Parameters:
     serializedVersion: 3
@@ -19982,7 +19981,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.42149085, y: 0.737016, z: 0.08496734}
+  - {x: -0.47894716, y: 0.73811394, z: 0.074531674}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -20131,8 +20130,8 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.38311356, y: 0.8439938, z: -0.054278627}
-  - {x: -0.368505, y: 0.77292794, z: -0.05420295}
+  - {x: -0.4581755, y: 0.73885477, z: -0.10151391}
+  - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
     widthMultiplier: 0.022
@@ -20449,6 +20448,34 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1602057129}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &910000070
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1460786855}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 40253408e7bf480bb22e2ce7b4943bd7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  arti: {fileID: 910000003}
+  ampiezzaBob: 0.03
+  offsetRiposo: 0
+--- !u!114 &910000080
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1460786855}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 40c5fddfe9884c5da7b10af810686620, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  intervalloFlip: 0.2
 --- !u!1 &950000010
 GameObject:
   m_ObjectHideFlags: 0
@@ -24787,6 +24814,8 @@ GameObject:
   - component: {fileID: 1460786856}
   - component: {fileID: 1460786858}
   - component: {fileID: 1460786857}
+  - component: {fileID: 910000070}
+  - component: {fileID: 910000080}
   m_Layer: 7
   m_Name: Base2D
   m_TagString: Untagged

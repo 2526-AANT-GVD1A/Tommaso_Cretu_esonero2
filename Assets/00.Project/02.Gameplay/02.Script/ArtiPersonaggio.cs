@@ -12,7 +12,8 @@ namespace ArcadeKart.Gameplay
     /// La cadenza NON dipende dalla velocita' del kart ma dalla fase: camminata in guida normale,
     /// corsa mentre il boost (mouse sinistro) e' tenuto. A kart fermo le gambe restano ferme.
     /// Il verso del passo segue la direzione di movimento del kart vista da camera (niente moonwalk).
-    /// Grazie a [ExecuteAlways] e all'anteprima in editor, i parametri si regolano in diretta dall'inspector.
+    /// Con [ExecuteAlways] in editor le linee restano disegnate sulla posa di riposo e si aggiornano
+    /// spostando le ancore; l'animazione vera e propria gira solo in Play.
     /// </summary>
     [DefaultExecutionOrder(200)] // dopo KartController e SpriteBillboard: le ancore sono gia' aggiornate nel frame
     [ExecuteAlways] // gira anche in edit mode: le linee si ridisegnano mentre si muovono gli slider
@@ -87,10 +88,6 @@ namespace ArcadeKart.Gameplay
         [Tooltip("Velocita' minima del kart (m/s) per invertire il verso del passo; sotto soglia resta l'ultimo verso (anti-jitter).")]
         [SerializeField] private float sogliaDirezione = 0.5f;
 
-        [Header("Anteprima in editor")]
-        [Tooltip("Solo in edit mode: mostra la fase corsa nell'anteprima della Scene view (senza boost si vede la camminata). Ignorato in Play.")]
-        [SerializeField] private bool anteprimaCorsa = false;
-
         // Fase corrente della pedalata, espressa in giri (0-1).
         private float fase;
 
@@ -105,6 +102,12 @@ namespace ArcadeKart.Gameplay
 
         // Peso animato (0-1) del movimento: porta ampiezze e fase a zero quando il kart e' fermo.
         private float pesoMovimento;
+
+        // Fase corrente del passo (0-1), pubblica per chi vuole sincronizzarsi con la camminata/corsa (es. BobBusto).
+        public float FasePasso => fase;
+
+        // Intensita' animata del movimento (0 a kart fermo, 1 a gambe in movimento): stessa rampa dolce delle gambe.
+        public float IntensitaMovimento => pesoMovimento;
 
         private void Awake()
         {
@@ -123,10 +126,8 @@ namespace ArcadeKart.Gameplay
             bool inEditor = !Application.isPlaying;
 
             // Fase camminata/corsa: dipende dal boost (mouse sx tenuto), NON dalla velocita' del kart.
+            // In edit mode il kart e' fermo e senza input: le linee restano sulla posa di riposo.
             bool inCorsa = kart != null && kart.IsBoosting;
-#if UNITY_EDITOR
-            if (inEditor) inCorsa = anteprimaCorsa; // nell'anteprima si sceglie la fase dal toggle
-#endif
             // Peso animato della fase: cadenza e ampiezze fondono dolcemente tra camminata e corsa.
             pesoCorsa = Mathf.MoveTowards(pesoCorsa, inCorsa ? 1f : 0f, 5f * dt);
             float frequenzaCorrente = Mathf.Lerp(frequenzaCamminata, frequenzaCorsa, pesoCorsa);
@@ -136,15 +137,8 @@ namespace ArcadeKart.Gameplay
 
             // Le gambe si muovono solo se il kart avanza davvero: sotto soglia restano ferme sulle ancore.
             bool inMovimento = kart != null && Mathf.Abs(kart.CurrentSpeed) > sogliaMovimento;
-#if UNITY_EDITOR
-            if (inEditor) inMovimento = true; // nell'anteprima le gambe sono sempre in movimento
-#endif
             // Peso animato del movimento: entrando/uscendo dal fermo ampiezze e fase passano per zero.
             pesoMovimento = Mathf.MoveTowards(pesoMovimento, inMovimento ? 1f : 0f, 8f * dt);
-
-#if UNITY_EDITOR
-            if (inEditor && pesoMovimento > 0f) UnityEditor.EditorApplication.QueuePlayerLoopUpdate(); // refresh continuo della Scene view
-#endif
 
             // La fase avanza solo a gambe in movimento.
             fase = Mathf.Repeat(fase + frequenzaCorrente * pesoMovimento * dt, 1f);
