@@ -676,6 +676,11 @@ namespace ArcadeKart.Core
         private bool CurrentBoost =>
             ControlsEnabled && input != null && input.Boost;
 
+        // True mentre il boost (mouse sx per il giocatore) e' tenuto: il
+        // soffitto di velocita' passa da cruiseSpeed a maxSpeed. Esposto per
+        // la fase corsa dell'animazione del personaggio (ArtiPersonaggio).
+        public bool IsBoosting => CurrentBoost;
+
         // Soffitto di velocita' effettivo in base al boost. Usato ovunque si
         // calcolava target/planarMax con maxSpeed (UpdateVelocity/UpdateSteering).
         private float EffectiveMaxSpeed =>

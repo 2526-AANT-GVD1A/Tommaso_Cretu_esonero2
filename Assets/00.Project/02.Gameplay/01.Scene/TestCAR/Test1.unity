@@ -19595,12 +19595,16 @@ MonoBehaviour:
     linea: {fileID: 910000042}
     curvatura: 0.03
     sfasamento: 0.5
-  frequenzaMassima: 3.72
-  ampiezzaMassima: 0
+  frequenzaCamminata: 2
+  frequenzaCorsa: 3.89
+  scalaAmpiezzeCorsa: 1.4
+  sogliaMovimento: 0.3
   ampiezzaPasso: 0
-  ampiezzaAlzo: 0.23
+  ampiezzaAlzo: 0.1
+  ampiezzaAlzoCorsa: 0.2
+  ampiezzaMassima: 0
   sogliaDirezione: 0.5
-  velocitaAnteprima: 0.6
+  anteprimaCorsa: 1
 --- !u!1 &910000010
 GameObject:
   m_ObjectHideFlags: 0
@@ -19680,7 +19684,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.3303401, y: 1.2289971, z: 0.111313514}
+  - {x: -0.33853075, y: 1.232136, z: 0.09465923}
   - {x: -0.26599994, y: 1.3933, z: 0.10000029}
   m_Parameters:
     serializedVersion: 3
@@ -19829,7 +19833,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.33027762, y: 1.2289971, z: -0.11166301}
+  - {x: -0.3326849, y: 1.2325569, z: -0.13127126}
   - {x: -0.26600015, y: 1.3933, z: -0.099999726}
   m_Parameters:
     serializedVersion: 3
@@ -19978,8 +19982,8 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.46272984, y: 0.80576134, z: 0.09966301}
-  - {x: -0.4528924, y: 0.7251916, z: 0.08041096}
+  - {x: -0.44062918, y: 0.73837656, z: 0.10178492}
+  - {x: -0.45299995, y: 0.5944, z: 0.08000046}
   m_Parameters:
     serializedVersion: 3
     widthMultiplier: 0.022
@@ -20127,8 +20131,8 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.46427116, y: 0.7388908, z: -0.098766565}
-  - {x: -0.45300013, y: 0.5944, z: -0.079999626}
+  - {x: -0.42672765, y: 0.8387394, z: -0.01847742}
+  - {x: -0.42869085, y: 0.77333075, z: -0.022017896}
   m_Parameters:
     serializedVersion: 3
     widthMultiplier: 0.022

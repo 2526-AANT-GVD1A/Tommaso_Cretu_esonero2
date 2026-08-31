@@ -7,9 +7,10 @@ namespace ArcadeKart.Gameplay
     /// Anima gli arti del personaggio dentro il kart.
     /// Ogni arto e' una linea (LineRenderer) a 3 punti:
     /// partenza (spalla/anca) -> punto centrale (gomito/ginocchio, calcolato via script) -> arrivo (mano/piede).
-    /// Le gambe simulano una camminata/corsa in base alla velocita' del kart:
-    /// il piede percorre un arco (scivola di lato e si alza nella meta' "in aria" del ciclo) e il ginocchio lo segue.
-    /// A kart fermo tutto torna fermo sulle ancore; piu' il kart corre, piu' il passo e' rapido ed ampio.
+    /// Le gambe simulano una camminata o una corsa: il piede percorre un arco (scivola di lato
+    /// e si alza nella meta' "in aria" del ciclo) e il ginocchio lo segue.
+    /// La cadenza NON dipende dalla velocita' del kart ma dalla fase: camminata in guida normale,
+    /// corsa mentre il boost (mouse sinistro) e' tenuto. A kart fermo le gambe restano ferme.
     /// Il verso del passo segue la direzione di movimento del kart vista da camera (niente moonwalk).
     /// Grazie a [ExecuteAlways] e all'anteprima in editor, i parametri si regolano in diretta dall'inspector.
     /// </summary>
@@ -62,23 +63,33 @@ namespace ArcadeKart.Gameplay
         [SerializeField] private Gamba gambaSinistra;
         [SerializeField] private Gamba gambaDestra;
 
-        [Header("Pedalata")]
-        [Tooltip("Cicli di pedalata al secondo quando il kart va alla velocita' massima.")]
-        [SerializeField] private float frequenzaMassima = 3.5f;
-        [Tooltip("Escursione massima del ginocchio durante la pedalata, in metri.")]
-        [SerializeField] private float ampiezzaMassima = 0.045f;
+        [Header("Camminata e corsa")]
+        [Tooltip("Cicli al secondo nella fase camminata (kart in movimento, boost spento). Valore fisso, non dipende dalla velocita'.")]
+        [SerializeField] private float frequenzaCamminata = 2f;
+        [Tooltip("Cicli al secondo nella fase corsa (boost mouse sinistro tenuto). Valore fisso.")]
+        [SerializeField] private float frequenzaCorsa = 5f;
+        [Tooltip("Moltiplicatore delle ampiezze di passo e ginocchio nella fase corsa (l'alzo del piede ha il suo campo dedicato ampiezzaAlzoCorsa).")]
+        [SerializeField] private float scalaAmpiezzeCorsa = 1.4f;
+        [Tooltip("Velocita' minima del kart (m/s) per avere le gambe in movimento; sotto soglia restano ferme sulle ancore.")]
+        [SerializeField] private float sogliaMovimento = 0.3f;
+
+        [Header("Ampiezze (camminata)")]
         [Tooltip("Escursione laterale del piede durante il passo, in metri.")]
         [SerializeField] private float ampiezzaPasso = 0.03f;
-        [Tooltip("Quanto si alza il piede nella fase in aria del passo, in metri.")]
+        [Tooltip("Quanto si alza il piede nella fase in aria del passo, in metri (fase camminata).")]
         [SerializeField] private float ampiezzaAlzo = 0.035f;
+        [Tooltip("Quanto si alza il piede nella fase corsa, in metri. Viene fuso dolcemente con ampiezzaAlzo tra le due fasi.")]
+        [SerializeField] private float ampiezzaAlzoCorsa = 0.3f;
+        [Tooltip("Escursione massima del ginocchio durante il passo, in metri.")]
+        [SerializeField] private float ampiezzaMassima = 0.045f;
 
         [Header("Direzione passo")]
         [Tooltip("Velocita' minima del kart (m/s) per invertire il verso del passo; sotto soglia resta l'ultimo verso (anti-jitter).")]
         [SerializeField] private float sogliaDirezione = 0.5f;
 
         [Header("Anteprima in editor")]
-        [Tooltip("Solo in edit mode: velocita' simulata (0-1) per vedere la camminata nella Scene view mentre si regola l'inspector. Ignorata in Play.")]
-        [Range(0f, 1f)] [SerializeField] private float velocitaAnteprima = 0.6f;
+        [Tooltip("Solo in edit mode: mostra la fase corsa nell'anteprima della Scene view (senza boost si vede la camminata). Ignorato in Play.")]
+        [SerializeField] private bool anteprimaCorsa = false;
 
         // Fase corrente della pedalata, espressa in giri (0-1).
         private float fase;
@@ -88,6 +99,12 @@ namespace ArcadeKart.Gameplay
 
         // Verso corrente dello scorrimento del passo: +1 o -1 secondo la direzione di movimento vista da camera.
         private float versoPasso = 1f;
+
+        // Peso animato (0-1) della fase corsa: fonde cadenza e ampiezze tra camminata e corsa senza scatti.
+        private float pesoCorsa;
+
+        // Peso animato (0-1) del movimento: porta ampiezze e fase a zero quando il kart e' fermo.
+        private float pesoMovimento;
 
         private void Awake()
         {
@@ -102,24 +119,35 @@ namespace ArcadeKart.Gameplay
 
         private void LateUpdate()
         {
-            // Velocita' normalizzata 0-1 rispetto alla massima del kart.
-            float velocita = kart != null ? Mathf.Abs(kart.CurrentSpeed) : 0f;
-            float massima = (kart != null && kart.MaxSpeed > 0.01f) ? kart.MaxSpeed : 1f;
-            float velocita01 = Mathf.Clamp01(velocita / massima);
             float dt = Time.deltaTime;
             bool inEditor = !Application.isPlaying;
 
+            // Fase camminata/corsa: dipende dal boost (mouse sx tenuto), NON dalla velocita' del kart.
+            bool inCorsa = kart != null && kart.IsBoosting;
 #if UNITY_EDITOR
-            // In edit mode l'anteprima sostituisce la velocita' reale (il kart e' sempre fermo fuori dal Play).
-            if (inEditor)
-            {
-                velocita01 = velocitaAnteprima;
-                if (velocitaAnteprima > 0f) UnityEditor.EditorApplication.QueuePlayerLoopUpdate(); // refresh continuo della Scene view
-            }
+            if (inEditor) inCorsa = anteprimaCorsa; // nell'anteprima si sceglie la fase dal toggle
+#endif
+            // Peso animato della fase: cadenza e ampiezze fondono dolcemente tra camminata e corsa.
+            pesoCorsa = Mathf.MoveTowards(pesoCorsa, inCorsa ? 1f : 0f, 5f * dt);
+            float frequenzaCorrente = Mathf.Lerp(frequenzaCamminata, frequenzaCorsa, pesoCorsa);
+            float scalaAmpiezze = Mathf.Lerp(1f, scalaAmpiezzeCorsa, pesoCorsa);
+            // L'alzo del piede ha valori espliciti per fase: si fonde con lo stesso peso della corsa.
+            float alzoCorrente = Mathf.Lerp(ampiezzaAlzo, ampiezzaAlzoCorsa, pesoCorsa);
+
+            // Le gambe si muovono solo se il kart avanza davvero: sotto soglia restano ferme sulle ancore.
+            bool inMovimento = kart != null && Mathf.Abs(kart.CurrentSpeed) > sogliaMovimento;
+#if UNITY_EDITOR
+            if (inEditor) inMovimento = true; // nell'anteprima le gambe sono sempre in movimento
+#endif
+            // Peso animato del movimento: entrando/uscendo dal fermo ampiezze e fase passano per zero.
+            pesoMovimento = Mathf.MoveTowards(pesoMovimento, inMovimento ? 1f : 0f, 8f * dt);
+
+#if UNITY_EDITOR
+            if (inEditor && pesoMovimento > 0f) UnityEditor.EditorApplication.QueuePlayerLoopUpdate(); // refresh continuo della Scene view
 #endif
 
-            // La fase avanza solo in movimento: kart fermo = gambe ferme.
-            fase = Mathf.Repeat(fase + frequenzaMassima * velocita01 * dt, 1f);
+            // La fase avanza solo a gambe in movimento.
+            fase = Mathf.Repeat(fase + frequenzaCorrente * pesoMovimento * dt, 1f);
 
             // Verso della camera: in Play la game camera, in editor la Scene view (anteprima fedele all'angolo in uso).
             Camera cam = Camera.main;
@@ -166,8 +194,8 @@ namespace ArcadeKart.Gameplay
             DisegnaBraccio(braccioDestro, versoCamera);
             float sfasamentoSX = gambaSinistra != null ? gambaSinistra.sfasamento : 0f;
             float sfasamentoDX = gambaDestra != null ? gambaDestra.sfasamento : 0.5f;
-            DisegnaGamba(gambaSinistra, versoCamera, suSchermo, lateraleSchermo, velocita01, fase + sfasamentoSX);
-            DisegnaGamba(gambaDestra, versoCamera, suSchermo, lateraleSchermo, velocita01, fase + sfasamentoDX);
+            DisegnaGamba(gambaSinistra, versoCamera, suSchermo, lateraleSchermo, scalaAmpiezze * pesoMovimento, alzoCorrente * pesoMovimento, fase + sfasamentoSX);
+            DisegnaGamba(gambaDestra, versoCamera, suSchermo, lateraleSchermo, scalaAmpiezze * pesoMovimento, alzoCorrente * pesoMovimento, fase + sfasamentoDX);
         }
 
         /// <summary>Braccio: spalla -> gomito (punto medio piegato) -> mano.</summary>
@@ -189,9 +217,10 @@ namespace ArcadeKart.Gameplay
         /// Gamba: anca -> ginocchio -> piede. Il piede percorre un arco a mezz'aria:
         /// scivola di lato mentre e' sollevato (meta' "in aria" del ciclo) e torna appoggiato nell'altra meta'.
         /// Lo scorrimento laterale segue versoPasso, cioe' la direzione di movimento del kart vista da camera.
-        /// Il ginocchio segue il piede animato e si alza in sincrono con lui.
+        /// scalaAmpiezze fonde passo e ginocchio tra le fasi, alzoPiede e' l'alzo del piede fuso camminata/corsa
+        /// (entrambi valgono 0 a kart fermo). Il ginocchio segue il piede animato e si alza in sincrono con lui.
         /// </summary>
-        private void DisegnaGamba(Gamba gamba, Vector3 versoCamera, Vector3 suSchermo, Vector3 lateraleSchermo, float velocita01, float faseGamba)
+        private void DisegnaGamba(Gamba gamba, Vector3 versoCamera, Vector3 suSchermo, Vector3 lateraleSchermo, float scalaAmpiezze, float alzoPiede, float faseGamba)
         {
             if (!Valido(gamba)) return;
 
@@ -201,12 +230,12 @@ namespace ArcadeKart.Gameplay
             // Arco del passo: lo scorrimento laterale e' continuo, l'alzo esiste solo nella meta' in aria (arco semicircolare).
             float angolo = faseGamba * Mathf.PI * 2f;
             Vector3 piedeAnimato = piedeBase
-                + lateraleSchermo * (Mathf.Cos(angolo) * ampiezzaPasso * velocita01 * versoPasso)
-                + suSchermo * (Mathf.Max(0f, Mathf.Sin(angolo)) * ampiezzaAlzo * velocita01);
+                + lateraleSchermo * (Mathf.Cos(angolo) * ampiezzaPasso * scalaAmpiezze * versoPasso)
+                + suSchermo * (Mathf.Max(0f, Mathf.Sin(angolo)) * alzoPiede);
 
             // Il ginocchio e' il punto medio tra anca e piede animato, con alzo sincronizzato al piede.
             Vector3 suGinocchio = DirezioneVisibile(piedeAnimato - anca, versoCamera);
-            float alzoGinocchio = Mathf.Max(0f, Mathf.Sin(angolo)) * ampiezzaMassima * velocita01;
+            float alzoGinocchio = Mathf.Max(0f, Mathf.Sin(angolo)) * ampiezzaMassima * scalaAmpiezze;
             Vector3 ginocchio = Vector3.Lerp(anca, piedeAnimato, 0.5f)
                 + suGinocchio * (gamba.curvatura + alzoGinocchio);
 
