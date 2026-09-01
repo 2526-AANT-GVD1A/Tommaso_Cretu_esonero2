@@ -17893,6 +17893,12 @@ MonoBehaviour:
   shoppingCartSlip: 0.75
   shoppingCartSlipSteerThreshold: 0.15
   cameraRelativeTurnResponsiveness: 10
+  turnRateCamminata: 400
+  turnAtRestCamminata: 0.72
+  shoppingCartSteerLossCamminata: 0.65
+  shoppingCartSlipCamminata: 0.75
+  shoppingCartSlipSteerThresholdCamminata: 0.15
+  cameraRelativeTurnResponsivenessCamminata: 10
   instantRealignAngle: 180
   instantRealignLongitudinalRetention: 0
   rotateBeforeMoveSpeedThreshold: 0.35
@@ -17911,6 +17917,14 @@ MonoBehaviour:
   driftVisual: {fileID: 981644902}
   driftVisualYawDegrees: 25
   driftVisualLerpSpeed: 8
+  groundLateralFrictionCamminata: 10
+  airLateralFrictionCamminata: 100
+  driftLateralFrictionCamminata: 4
+  driftMinSpeedCamminata: 4
+  driftMinSteerCamminata: 0.2
+  driftSteerBoostCamminata: 1.4
+  driftVisualYawDegreesCamminata: 25
+  driftVisualLerpSpeedCamminata: 8
   activeDriftToggleObjects: []
   activeDriftMinSpeed: 1
   activeDriftMinSteer: 0.35
@@ -19683,7 +19697,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.3299314, y: 1.2290616, z: 0.11419826}
+  - {x: -0.32996282, y: 1.2298532, z: 0.12137677}
   - {x: -0.26599994, y: 1.3933, z: 0.10000029}
   m_Parameters:
     serializedVersion: 3
@@ -19832,7 +19846,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.33085763, y: 1.2290554, z: -0.108960405}
+  - {x: -0.33255967, y: 1.2295399, z: -0.10394085}
   - {x: -0.26600015, y: 1.3933, z: -0.099999726}
   m_Parameters:
     serializedVersion: 3
@@ -19981,7 +19995,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.47894716, y: 0.73811394, z: 0.074531674}
+  - {x: -0.46752903, y: 0.73656285, z: 0.04941514}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -20130,7 +20144,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.4581755, y: 0.73885477, z: -0.10151391}
+  - {x: -0.46131545, y: 0.7388834, z: -0.10030331}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -24473,7 +24487,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxSpeed: 10
-  cruiseSpeed: 3
+  cruiseSpeed: 4
   boostReleaseDeceleration: 8
   driftBoostEndDecay: 6
   acceleration: 10
@@ -24486,6 +24500,12 @@ MonoBehaviour:
   shoppingCartSlip: 0.75
   shoppingCartSlipSteerThreshold: 0.15
   cameraRelativeTurnResponsiveness: 10
+  turnRateCamminata: 800
+  turnAtRestCamminata: 0.72
+  shoppingCartSteerLossCamminata: 0.65
+  shoppingCartSlipCamminata: 0.75
+  shoppingCartSlipSteerThresholdCamminata: 0.15
+  cameraRelativeTurnResponsivenessCamminata: 10
   instantRealignAngle: 180
   instantRealignLongitudinalRetention: 0
   rotateBeforeMoveSpeedThreshold: 0.35
@@ -24495,7 +24515,7 @@ MonoBehaviour:
   movingReorientationMinSpeed: 4
   movingReorientationAccelerationFactor: 0.05
   movingReorientationBrakeStrength: 20
-  groundLateralFriction: 10
+  groundLateralFriction: 7
   airLateralFriction: 100
   driftLateralFriction: 4
   driftMinSpeed: 4
@@ -24504,6 +24524,14 @@ MonoBehaviour:
   driftVisual: {fileID: 1715983992}
   driftVisualYawDegrees: 25
   driftVisualLerpSpeed: 8
+  groundLateralFrictionCamminata: 10
+  airLateralFrictionCamminata: 100
+  driftLateralFrictionCamminata: 4
+  driftMinSpeedCamminata: 4
+  driftMinSteerCamminata: 0.2
+  driftSteerBoostCamminata: 1.4
+  driftVisualYawDegreesCamminata: 25
+  driftVisualLerpSpeedCamminata: 8
   activeDriftToggleObjects: []
   activeDriftMinSpeed: 1
   activeDriftMinSteer: 0.35

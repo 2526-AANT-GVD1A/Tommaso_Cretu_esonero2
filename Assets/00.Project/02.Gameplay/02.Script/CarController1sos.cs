@@ -35,28 +35,58 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Forza extra del freno quando il giocatore preme Brake.")]
         private float brakeStrength = 18f;
 
-        [Header("Steering")]
-        [SerializeField, Tooltip("Gradi al secondo di sterzata a velocita' massima.")]
-        private float turnRate = 110f;
+        // ===== Steering: stesso schema per-fase del Grip / Drift =====
+        // Due set (CORSA con i nomi storici agganciati ai valori di scena,
+        // CAMMINATA con i gemelli) fusi a runtime con PesoCorsa. Le variabili
+        // "assolute" (turnRate, turnAtRest, cameraRelativeTurnResponsiveness)
+        // sono quelle che cambiano davvero comportamento a soffitto basso;
+        // shoppingCartSlip/SteerLoss sono gia' normalizzate su speedRatio e
+        // qui vengono duplicate solo per liberta' di ritratura extra.
+        [Header("Steering — Corsa (mouse sx tenuto)")]
+        [SerializeField, Tooltip("Gradi al secondo di sterzata a velocita' massima, in fase CORSA.")]
+        private float turnRate = 400f;
 
-        [SerializeField, Tooltip("Quanto si gira da fermo (0 = niente, 1 = come in corsa).")]
+        [SerializeField, Tooltip("Quanto si gira da fermo in fase CORSA (0 = niente, 1 = come a piena velocita').")]
         [Range(0f, 1f)]
-        private float turnAtRest = 0.2f;
+        private float turnAtRest = 0.72f;
 
-        [SerializeField, Tooltip("Quanto la sterzata perde efficacia alle alte velocita'. 0 = sterzo sempre uguale, 1 = molto effetto carrello.")]
+        [SerializeField, Tooltip("Quanto la sterzata perde efficacia alle alte velocita', in fase CORSA. 0 = sterzo sempre uguale, 1 = molto effetto carrello.")]
         [Range(0f, 1f)]
         private float shoppingCartSteerLoss = 0.65f;
 
-        [SerializeField, Tooltip("Quanto il kart perde grip laterale in curva alle alte velocita'.")]
+        [SerializeField, Tooltip("Quanto il kart perde grip laterale in curva alle alte velocita', in fase CORSA.")]
         [Range(0f, 1f)]
         private float shoppingCartSlip = 0.75f;
 
-        [SerializeField, Tooltip("Quanto input di sterzo serve per iniziare a far slittare sensibilmente il kart.")]
+        [SerializeField, Tooltip("Quanto input di sterzo serve per iniziare a far slittare sensibilmente il kart, in fase CORSA.")]
         [Range(0f, 1f)]
         private float shoppingCartSlipSteerThreshold = 0.15f;
 
-        [SerializeField, Tooltip("Velocita' con cui il kart ruota verso la direzione desiderata letta dalla camera.")]
+        [SerializeField, Tooltip("Velocita' con cui il kart ruota verso la direzione desiderata letta dalla camera, in fase CORSA (reorientation).")]
         private float cameraRelativeTurnResponsiveness = 10f;
+
+        [Header("Steering — Camminata (boost rilasciato)")]
+        [SerializeField, Tooltip("Gradi al secondo di sterzata a velocita' massima di fase, in fase CAMMINATA (boost rilasciato). Si fonde dolcemente con la versione corsa durante la transizione. Default = valore corsa.")]
+        private float turnRateCamminata = 400f;
+
+        [SerializeField, Tooltip("Quanto si gira da fermo in fase CAMMINATA (0 = niente, 1 = come a piena velocita' di fase). Default = valore corsa.")]
+        [Range(0f, 1f)]
+        private float turnAtRestCamminata = 0.72f;
+
+        [SerializeField, Tooltip("Quanto la sterzata perde efficacia alle alte velocita' di fase, in fase CAMMINATA. Default = valore corsa.")]
+        [Range(0f, 1f)]
+        private float shoppingCartSteerLossCamminata = 0.65f;
+
+        [SerializeField, Tooltip("Quanto il kart perde grip laterale in curva alle alte velocita' di fase, in fase CAMMINATA. Default = valore corsa.")]
+        [Range(0f, 1f)]
+        private float shoppingCartSlipCamminata = 0.75f;
+
+        [SerializeField, Tooltip("Quanto input di sterzo serve per iniziare a far slittare sensibilmente il kart, in fase CAMMINATA. Default = valore corsa.")]
+        [Range(0f, 1f)]
+        private float shoppingCartSlipSteerThresholdCamminata = 0.15f;
+
+        [SerializeField, Tooltip("Velocita' con cui il kart ruota verso la direzione desiderata letta dalla camera, in fase CAMMINATA (reorientation). Default = valore corsa.")]
+        private float cameraRelativeTurnResponsivenessCamminata = 10f;
 
         [Header("Reorientation")]
         [SerializeField, Tooltip("Soglia angolare (gradi) per il cambio direzione istantaneo. Sopra questo angolo il kart scatta subito verso la nuova direzione preservando la spinta longitudinale; sotto usa la sterzata graduale con drift e slip 'carrello della spesa'. 360 = mai snap (comportamento originale).")]
@@ -786,6 +816,28 @@ namespace ArcadeKart.Core
         private float driftVisualLerpSpeedCorrente =>
             Mathf.Lerp(driftVisualLerpSpeedCamminata, driftVisualLerpSpeed, PesoCorsa);
 
+        // Valori Steering fusi per fase (stesso meccanismo del Grip/Drift).
+        // Usati da UpdateSteering (turnRate, turnAtRest,
+        // cameraRelativeTurnResponsiveness, shoppingCartSteerLoss) e da
+        // UpdateVelocity (shoppingCartSlip, shoppingCartSlipSteerThreshold).
+        private float turnRateCorrente =>
+            Mathf.Lerp(turnRateCamminata, turnRate, PesoCorsa);
+
+        private float turnAtRestCorrente =>
+            Mathf.Lerp(turnAtRestCamminata, turnAtRest, PesoCorsa);
+
+        private float shoppingCartSteerLossCorrente =>
+            Mathf.Lerp(shoppingCartSteerLossCamminata, shoppingCartSteerLoss, PesoCorsa);
+
+        private float shoppingCartSlipCorrente =>
+            Mathf.Lerp(shoppingCartSlipCamminata, shoppingCartSlip, PesoCorsa);
+
+        private float shoppingCartSlipSteerThresholdCorrente =>
+            Mathf.Lerp(shoppingCartSlipSteerThresholdCamminata, shoppingCartSlipSteerThreshold, PesoCorsa);
+
+        private float cameraRelativeTurnResponsivenessCorrente =>
+            Mathf.Lerp(cameraRelativeTurnResponsivenessCamminata, cameraRelativeTurnResponsiveness, PesoCorsa);
+
         private bool CurrentDrift =>
             ControlsEnabled && input != null && input.Drift;
         private Coroutine multiplierRoutine;
@@ -1324,12 +1376,12 @@ private void UpdateSkateRampLaunchState()
             // In modalita' AI usiamo sempre turnFactor 1: niente riduzione
             // turnAtRest a bassa velocita', cosi' il NPC sterza a rate pieno
             // verso la direzione desiderata anche da fermo o in manovra.
-            float turnFactor = aiSteeringMode ? 1f : Mathf.Lerp(turnAtRest, 1f, speedRatio);
-            float effectiveTurn = turnRate * turnFactor;
+            float turnFactor = aiSteeringMode ? 1f : Mathf.Lerp(turnAtRestCorrente, 1f, speedRatio);
+            float effectiveTurn = turnRateCorrente * turnFactor;
 
             if (isReorientingFromStop || isReorientingWhileMoving)
             {
-                effectiveTurn = Mathf.Max(effectiveTurn, turnRate * cameraRelativeTurnResponsiveness);
+                effectiveTurn = Mathf.Max(effectiveTurn, turnRateCorrente * cameraRelativeTurnResponsivenessCorrente);
             }
 
             // In aria il kart perde grip di sterzata (airControl); in modalita'
@@ -1343,7 +1395,7 @@ private void UpdateSkateRampLaunchState()
             if (CurrentDrift && IsGrounded)
                 effectiveTurn *= driftSteerBoostCorrente;
 
-            float steerLossMultiplier = Mathf.Lerp(1f, 1f - shoppingCartSteerLoss, speedRatio);
+            float steerLossMultiplier = Mathf.Lerp(1f, 1f - shoppingCartSteerLossCorrente, speedRatio);
             effectiveTurn *= steerLossMultiplier;
 
             float maxStep = effectiveTurn * Time.fixedDeltaTime;
@@ -1455,17 +1507,17 @@ private void UpdateSkateRampLaunchState()
             // "carrello della spesa" non deve intervenire (abbasserebbe di nuovo
             // la grip ulteriormente in modo non desiderato). Si applica solo
             // nel caso passivo.
-            if (!isDriftingActive && IsGrounded && lastSteerAmount > shoppingCartSlipSteerThreshold)
+            if (!isDriftingActive && IsGrounded && lastSteerAmount > shoppingCartSlipSteerThresholdCorrente)
             {
                 float steerFactor = Mathf.InverseLerp(
-                    shoppingCartSlipSteerThreshold,
+                    shoppingCartSlipSteerThresholdCorrente,
                     1f,
                     lastSteerAmount
                 );
 
                 float slipMultiplier = Mathf.Lerp(
                     1f,
-                    1f - shoppingCartSlip,
+                    1f - shoppingCartSlipCorrente,
                     speedRatio * steerFactor
                 );
 
