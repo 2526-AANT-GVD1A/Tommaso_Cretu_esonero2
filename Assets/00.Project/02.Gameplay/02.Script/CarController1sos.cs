@@ -89,34 +89,71 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Extra frenata sul forward locale mentre il kart si riallinea in corsa.")]
         private float movingReorientationBrakeStrength = 20f;
 
-        [Header("Grip / Drift")]
-        [SerializeField, Tooltip("Grip laterale normale a terra. Alto = il kart si riallinea meglio.")]
-        private float groundLateralFriction = 14f;
+        // ===== Grip / Drift: le variabili esistono in DUE set, uno per fase =====
+        // CORSA (boost mouse sx tenuto) e CAMMINATA (boost rilasciato). I valori
+        // CORSA sono quelli sintonizzati storicamente (quando il kart era
+        // permanentemente in corsa e i nomi dei campi non sono cambiati, cosi'
+        // i valori gia' serializzati nelle scene restano agganciati). I valori
+        // CAMMINATA partono identici ai corsa per non alterare il feeling di
+        // partenza: si ritunano solo per la fase bassa. A runtime i due set si
+        // fondono con PesoCorsa (vedi region Internal), derivato dal soffitto
+        // smorzato currentEffectiveMax: cosi' il grip "da corsa" resta finche'
+        // il soffitto e' alto e scivola su quello "da camminata" durante il
+        // rilascio del boost, senza scatti.
+        [Header("Grip / Drift — Corsa (mouse sx tenuto)")]
+        [SerializeField, Tooltip("Grip laterale normale a terra in fase CORSA. Alto = il kart si riallinea meglio.")]
+        private float groundLateralFriction = 10f;
 
-        [SerializeField, Tooltip("Grip laterale mentre sei in aria. Basso = mantiene piu' inerzia laterale.")]
-        private float airLateralFriction = 2f;
+        [SerializeField, Tooltip("Grip laterale mentre sei in aria in fase CORSA. Basso = mantiene piu' inerzia laterale.")]
+        private float airLateralFriction = 100f;
 
-        [SerializeField, Tooltip("Grip laterale mentre tieni premuto Drift.")]
+        [SerializeField, Tooltip("Grip laterale mentre tieni premuto Drift, in fase CORSA.")]
         private float driftLateralFriction = 4f;
 
-        [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift.")]
+        [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift, in fase CORSA.")]
         private float driftMinSpeed = 4f;
 
-        [SerializeField, Tooltip("Input minimo di direzione per considerare attivo il drift.")]
+        [SerializeField, Tooltip("Input minimo di direzione per considerare attivo il drift, in fase CORSA.")]
         [Range(0f, 1f)]
         private float driftMinSteer = 0.2f;
 
-        [SerializeField, Tooltip("Moltiplicatore di sterzata mentre tieni Drift.")]
+        [SerializeField, Tooltip("Moltiplicatore di sterzata mentre tieni Drift, in fase CORSA.")]
         private float driftSteerBoost = 1.4f;
 
-        [SerializeField, Tooltip("Transform del mesh visivo del kart.")]
+        [SerializeField, Tooltip("Transform del mesh visivo del kart (comune alle due fasi).")]
         private Transform driftVisual;
 
-        [SerializeField, Tooltip("Gradi massimi di rotazione visiva del mesh durante il drift.")]
+        [SerializeField, Tooltip("Gradi massimi di rotazione visiva del mesh durante il drift, in fase CORSA.")]
         private float driftVisualYawDegrees = 25f;
 
-        [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo.")]
+        [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo, in fase CORSA.")]
         private float driftVisualLerpSpeed = 8f;
+
+        [Header("Grip / Drift — Camminata (boost rilasciato)")]
+        [SerializeField, Tooltip("Grip laterale normale a terra in fase CAMMINATA (boost rilasciato). Si fonde dolcemente con la versione corsa durante la transizione. Default = valore corsa: regolarlo per la fase bassa.")]
+        private float groundLateralFrictionCamminata = 10f;
+
+        [SerializeField, Tooltip("Grip laterale mentre sei in aria in fase CAMMINATA. Basso = mantiene piu' inerzia laterale. Default = valore corsa.")]
+        private float airLateralFrictionCamminata = 100f;
+
+        [SerializeField, Tooltip("Grip laterale mentre tieni premuto Drift, in fase CAMMINATA. Default = valore corsa.")]
+        private float driftLateralFrictionCamminata = 4f;
+
+        [SerializeField, Tooltip("Velocita' minima del kart per considerare attivo il drift, in fase CAMMINATA. Attenzione: se supera cruiseSpeed il drift passivo non puo' MAI attivarsi in camminata (es. 4 con cruise 3). Default = valore corsa.")]
+        private float driftMinSpeedCamminata = 4f;
+
+        [SerializeField, Tooltip("Input minimo di direzione per considerare attivo il drift, in fase CAMMINATA. Default = valore corsa.")]
+        [Range(0f, 1f)]
+        private float driftMinSteerCamminata = 0.2f;
+
+        [SerializeField, Tooltip("Moltiplicatore di sterzata mentre tieni Drift, in fase CAMMINATA. Default = valore corsa.")]
+        private float driftSteerBoostCamminata = 1.4f;
+
+        [SerializeField, Tooltip("Gradi massimi di rotazione visiva del mesh durante il drift, in fase CAMMINATA. Default = valore corsa.")]
+        private float driftVisualYawDegreesCamminata = 25f;
+
+        [SerializeField, Tooltip("Velocita' di transizione dello yaw visivo, in fase CAMMINATA. Default = valore corsa.")]
+        private float driftVisualLerpSpeedCamminata = 8f;
 
         [Header("Active Drift")]
         [SerializeField, Tooltip("Il drift (attivo e passivo) e' abilitato solo se ALMENO UNO di questi oggetti e' attivo nella scena (activeInHierarchy). Attivando/disattivando un oggetto della lista (SetActive) si abilita/disabilita il drift. Lista vuota o tutti nulli = drift sempre disattivo.")]
@@ -310,8 +347,8 @@ namespace ArcadeKart.Core
             || (ActiveDriftEnabled
                 && CurrentDrift
                 && IsGrounded
-                && Mathf.Abs(CurrentSpeed) >= driftMinSpeed
-                && CurrentMove.sqrMagnitude >= driftMinSteer * driftMinSteer);
+                && Mathf.Abs(CurrentSpeed) >= driftMinSpeedCorrente
+                && CurrentMove.sqrMagnitude >= driftMinSteerCorrente * driftMinSteerCorrente);
 
         public bool IsDriftingActive => isDriftingActive;
 
@@ -707,6 +744,47 @@ namespace ArcadeKart.Core
         // drift-boost, anche con activeDriftBoostMagnitude alto. Firmato: gestisce
         // anche mult<1 (slow pad) come eccesso negativo.
         private float boostExcess;
+
+        // Peso della fase corsa (0 = camminata, 1 = corsa) per la fusione dei
+        // set Grip/Drift. Derivato dal soffitto smorzato currentEffectiveMax:
+        // segue le stesse rampe del boost (salita ad 'acceleration' alla
+        // pressione, discesa a 'boostReleaseDeceleration' al rilascio), quindi
+        // il grip resta "da corsa" finche' il soffitto e' alto e transita
+        // dolcemente su quello "da camminata" mentre la velocita' cala. Nessuno
+        // stato da tenere in sync. In modalita' AI e' fissato a 1 (corsa): il
+        // NPC non ha il boost (EnemyKart.Boost => false) e col peso derivato
+        // cadrebbe per sempre sul set camminata perdendo la sintonia storica.
+        private float PesoCorsa =>
+            aiSteeringMode
+                ? 1f
+                : Mathf.Clamp01(Mathf.InverseLerp(cruiseSpeed, maxSpeed, currentEffectiveMax));
+
+        // Valori Grip/Drift fusi per fase (camminata <-> corsa via PesoCorsa).
+        // Usati da IsDrifting, UpdateSteering, UpdateVelocity e
+        // UpdateDriftVisual al posto dei campi grezzi.
+        private float groundLateralFrictionCorrente =>
+            Mathf.Lerp(groundLateralFrictionCamminata, groundLateralFriction, PesoCorsa);
+
+        private float airLateralFrictionCorrente =>
+            Mathf.Lerp(airLateralFrictionCamminata, airLateralFriction, PesoCorsa);
+
+        private float driftLateralFrictionCorrente =>
+            Mathf.Lerp(driftLateralFrictionCamminata, driftLateralFriction, PesoCorsa);
+
+        private float driftMinSpeedCorrente =>
+            Mathf.Lerp(driftMinSpeedCamminata, driftMinSpeed, PesoCorsa);
+
+        private float driftMinSteerCorrente =>
+            Mathf.Lerp(driftMinSteerCamminata, driftMinSteer, PesoCorsa);
+
+        private float driftSteerBoostCorrente =>
+            Mathf.Lerp(driftSteerBoostCamminata, driftSteerBoost, PesoCorsa);
+
+        private float driftVisualYawDegreesCorrente =>
+            Mathf.Lerp(driftVisualYawDegreesCamminata, driftVisualYawDegrees, PesoCorsa);
+
+        private float driftVisualLerpSpeedCorrente =>
+            Mathf.Lerp(driftVisualLerpSpeedCamminata, driftVisualLerpSpeed, PesoCorsa);
 
         private bool CurrentDrift =>
             ControlsEnabled && input != null && input.Drift;
@@ -1263,7 +1341,7 @@ private void UpdateSkateRampLaunchState()
                 effectiveTurn *= airControl;
 
             if (CurrentDrift && IsGrounded)
-                effectiveTurn *= driftSteerBoost;
+                effectiveTurn *= driftSteerBoostCorrente;
 
             float steerLossMultiplier = Mathf.Lerp(1f, 1f - shoppingCartSteerLoss, speedRatio);
             effectiveTurn *= steerLossMultiplier;
@@ -1355,11 +1433,12 @@ private void UpdateSkateRampLaunchState()
                 forwardRate * Time.fixedDeltaTime
             );
 
-            float lateralFriction = groundLateralFriction;
+            // Grip laterale fusa per fase (camminata/corsa, vedi PesoCorsa).
+            float lateralFriction = groundLateralFrictionCorrente;
 
             if (!IsGrounded)
             {
-                lateralFriction = airLateralFriction;
+                lateralFriction = airLateralFrictionCorrente;
             }
             else if (isDriftingActive)
             {
@@ -1367,7 +1446,7 @@ private void UpdateSkateRampLaunchState()
             }
             else if (IsDrifting)
             {
-                lateralFriction = driftLateralFriction;
+                lateralFriction = driftLateralFrictionCorrente;
             }
 
             float speedRatio = Mathf.Clamp01(Mathf.Abs(CurrentSpeed) / Mathf.Max(0.01f, currentEffectiveMax));
@@ -1552,7 +1631,7 @@ private void UpdateSkateRampLaunchState()
                 return;
 
             float targetYaw = 0f;
-            float lerpSpeed = driftVisualLerpSpeed;
+            float lerpSpeed = driftVisualLerpSpeedCorrente;
 
             // DRIFT ATTIVO: inclinazione visiva basata sullo SLIP ANGLE
             // (angolo fra muso del kart e velocity), NON sul joystick.
@@ -1577,14 +1656,14 @@ private void UpdateSkateRampLaunchState()
 
                     float slipAngle = Vector3.SignedAngle(fwdXZ, velXZ, Vector3.up);
                     float steer = Mathf.Clamp(slipAngle / 90f, -1f, 1f);
-                    targetYaw = steer * driftVisualYawDegrees * activeDriftVisualYawScale;
+                    targetYaw = steer * driftVisualYawDegreesCorrente * activeDriftVisualYawScale;
                 }
                 else if (desiredMoveDirection.sqrMagnitude > 0.001f)
                 {
                     // Velocity ~0: fallback al joystick (vecchio comportamento).
                     float signedAngle = Vector3.SignedAngle(transform.forward, desiredMoveDirection, Vector3.up);
                     float steer = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
-                    targetYaw = steer * driftVisualYawDegrees * activeDriftVisualYawScale;
+                    targetYaw = steer * driftVisualYawDegreesCorrente * activeDriftVisualYawScale;
                 }
 
                 lerpSpeed = activeDriftVisualLerpSpeed;
@@ -1593,7 +1672,7 @@ private void UpdateSkateRampLaunchState()
             {
                 float signedAngle = Vector3.SignedAngle(transform.forward, desiredMoveDirection, Vector3.up);
                 float steer = Mathf.Clamp(signedAngle / 90f, -1f, 1f);
-                targetYaw = steer * driftVisualYawDegrees;
+                targetYaw = steer * driftVisualYawDegreesCorrente;
             }
 
             currentDriftYaw = Mathf.Lerp(
