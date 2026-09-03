@@ -19807,7 +19807,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.36668125, y: 1.2480787, z: 0.17740187}
+  - {x: -0.34049407, y: 1.2386371, z: 0.12450347}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -19956,7 +19956,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.3705312, y: 1.2506802, z: -0.17502752}
+  - {x: -0.35028568, y: 1.2380666, z: -0.17857514}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -20105,7 +20105,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.41903055, y: 0.73641425, z: 0.07409701}
+  - {x: -0.4249329, y: 0.73740375, z: 0.090909384}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -20254,7 +20254,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.41921386, y: 0.73653775, z: -0.07651058}
+  - {x: -0.4224607, y: 0.7357745, z: -0.059084766}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -35785,7 +35785,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5be23c4743057bed69abd36f6c912cb8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  phaseId: Default
+  phaseId: 
   transitionMode: 0
   exitPhaseId: 
   exitTransitionMode: 0

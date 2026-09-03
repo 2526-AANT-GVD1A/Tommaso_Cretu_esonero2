@@ -6,7 +6,7 @@ namespace ArcadeKart.Utility
     public class CameraPhaseTrigger : MonoBehaviour
     {
         [Header("Phase - Ingresso")]
-        [SerializeField, Tooltip("ID della fase da attivare quando il kart entra nel trigger.")]
+        [SerializeField, Tooltip("ID della fase da attivare quando il kart entra nel trigger. Vuoto = il trigger non cambia la fase camera, si limita ad attivare/disattivare gli oggetti.")]
         private string phaseId = "Default";
 
         [SerializeField, Tooltip("Smooth = transizione fluida col damping. Snap = salto immediato sulla nuova inquadratura.")]
@@ -59,15 +59,22 @@ namespace ArcadeKart.Utility
             if (!string.IsNullOrEmpty(requiredTag) && !other.CompareTag(requiredTag))
                 return;
 
-            if (targetCamera == null)
-            {
-                Debug.LogWarning("[CameraPhaseTrigger] Nessuna PhasedFollowCamera trovata.", this);
-                return;
-            }
+            // Phase Id vuoto: il trigger lavora solo sugli oggetti (modelli,
+            // parti di livello, canvas) senza toccare la fase camera.
+            bool hasPhase = !string.IsNullOrWhiteSpace(phaseId);
 
-            bool changed = targetCamera.SetPhase(phaseId, transitionMode);
-            if (!changed)
-                return;
+            if (hasPhase)
+            {
+                if (targetCamera == null)
+                {
+                    Debug.LogWarning("[CameraPhaseTrigger] Nessuna PhasedFollowCamera trovata.", this);
+                    return;
+                }
+
+                bool changed = targetCamera.SetPhase(phaseId, transitionMode);
+                if (!changed)
+                    return;
+            }
 
             ApplyToggleState();
 
