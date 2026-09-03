@@ -92,10 +92,6 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Tempo minimo (sec) fra due cambio-punto da tocco-muro, per evitare spam/parasita.")]
         private float wallTouchCooldown = 0.3f;
 
-        [Header("Debug")]
-        [SerializeField, Tooltip("Log diagnostico in Console: nuovi target wander, tocchi muro, stato. TEMPORANEO: rimuovere dopo diagnosi.")]
-        private bool debugLog = true;
-
         #endregion
 
         #region IKartInput
@@ -140,8 +136,6 @@ namespace ArcadeKart.Gameplay
         private float wanderTargetTime;
         // Time.time dell'ultimo tocco-muro (per il wallTouchCooldown).
         private float lastWallTouchTime = -999f;
-        // Timer per il log di stato periodico (debug).
-        private float nextDebugStateLog;
         // Accumulo tempo "fermo" (velocita' bassa mentre c'e' un target wander):
         // se supera stuckTimeout, forzo un target lontano per disincagliare.
         private float stuckTimer;
@@ -195,19 +189,6 @@ namespace ArcadeKart.Gameplay
             // precedente resterebbe "appeso" (stale) nei frame successivi.
             brake = false;
             drift = false;
-
-            // --- Log di stato periodico (TEMPORANEO, debug): per diagnosticare
-            // "sempre verso su" - ci dice se e' grounded, se rileva il player,
-            // se e' in chase. Da rimuovere dopo diagnosi.
-            if (debugLog && Time.time >= nextDebugStateLog)
-            {
-                nextDebugStateLog = Time.time + 1f;
-                bool pInside = territoryZone != null && territoryZone.PlayerInside;
-                bool grounded = kart != null && kart.IsGrounded;
-                Vector3 pos = myTransform.position;
-                Vector3 fwd = myTransform.forward; fwd.y = 0f;
-                Debug.Log($"[EnemyKart] stato: grounded={grounded} playerInside={pInside} lockedOn={lockedOn} pos={pos} fwd={fwd} vel={rb.linearVelocity}", this);
-            }
 
             // --- Rilevamento ---
             bool playerInRange = territoryZone != null && territoryZone.PlayerInside;
@@ -295,8 +276,6 @@ namespace ArcadeKart.Gameplay
                         toTarget = target - myTransform.position;
                         toTarget.y = 0f;
                         dist = toTarget.magnitude;
-                        if (debugLog)
-                            Debug.Log($"[EnemyKart] STUCK ({planarSpeed:F2} m/s per >{stuckTimeout}s): forzo target lontano {far.Value} (dist={dist:F2})", this);
                     }
                 }
 
@@ -528,9 +507,6 @@ namespace ArcadeKart.Gameplay
                     wanderTarget = reflected;
                     wanderTargetTime = Time.time;
                     lockedOn = false;
-
-                    if (debugLog)
-                        Debug.Log($"[EnemyKart] TOCCO MURO (minEdge={minEdgeT:F2} changed={changed} pos={p}) -> riflesso a {reflected.Value}", this);
                 }
             }
         }
@@ -656,12 +632,6 @@ namespace ArcadeKart.Gameplay
                 if (wanderTarget.HasValue)
                 {
                     wanderTargetTime = Time.time;
-                    if (debugLog)
-                    {
-                        Vector3 wt = wanderTarget.Value;
-                        Vector3 dir = wt - myTransform.position; dir.y = 0f;
-                        Debug.Log($"[EnemyKart] Nuovo target wander: {wt} (dir={dir}, dist={dir.magnitude:F2})", this);
-                    }
                 }
             }
 

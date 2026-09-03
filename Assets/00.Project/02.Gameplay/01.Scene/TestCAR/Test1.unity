@@ -17957,6 +17957,9 @@ MonoBehaviour:
   rideHeight: 0.4
   suspensionStrength: 90
   suspensionDamping: 0.1
+  seamHopMaxVerticalSpeed: 0.6
+  groundFlatNormalThreshold: 0.95
+  logSeamHopDiagnostics: 0
   wallContactGraceTime: 0.2
   airAngularDamping: 2.5
   maxAirYawAngularVelocity: 0
@@ -19807,7 +19810,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.34049407, y: 1.2386371, z: 0.12450347}
+  - {x: -0.3341441, y: 1.2339633, z: 0.13161716}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -19956,7 +19959,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.35028568, y: 1.2380666, z: -0.17857514}
+  - {x: -0.34236327, y: 1.2337885, z: -0.17446166}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -20105,7 +20108,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.4249329, y: 0.73740375, z: 0.090909384}
+  - {x: -0.43277672, y: 0.737982, z: 0.0982234}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -20254,7 +20257,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.4224607, y: 0.7357745, z: -0.059084766}
+  - {x: -0.4293172, y: 0.7355418, z: -0.05042009}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -24673,6 +24676,9 @@ MonoBehaviour:
   rideHeight: 0.4
   suspensionStrength: 90
   suspensionDamping: 0.1
+  seamHopMaxVerticalSpeed: 0.6
+  groundFlatNormalThreshold: 0.95
+  logSeamHopDiagnostics: 1
   wallContactGraceTime: 0.2
   airAngularDamping: 2.5
   maxAirYawAngularVelocity: 0

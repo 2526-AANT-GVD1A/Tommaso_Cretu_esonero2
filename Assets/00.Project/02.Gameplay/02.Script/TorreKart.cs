@@ -543,7 +543,6 @@ namespace ArcadeKart.Gameplay
             // rappresenta "quanti ne ho raccolti dall'ultimo reset", non
             // "quanti ne ho addosso ora" (quello e' ItemCount).
             totalCollected++;
-            Debug.Log("[KartCollectedStack] Totale raccolti: " + totalCollected, this);
         }
 
         public void ClearAll()

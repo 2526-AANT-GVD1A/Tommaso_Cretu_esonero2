@@ -294,6 +294,26 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Smorzamento della sospensione.")]
         private float suspensionDamping = 12f;
 
+        [SerializeField, Tooltip("Alzata del fondo della/e CapsuleCollider fisiche del kart (metri, applicata a runtime restringendo la capsula e tenendo fisso il top). Con il fondo alzato, su terreno piatto il kart cavalca SOLO sulla sospensione raycast e non tocca mai i bordi di giunzione fra i collider (niente piu' ghost bump posizionale). Il contatto fisico si ristabilisce da solo dove serve: su pendenze (la superficie risale verso la capsula entro pochi gradi), agli atterraggi e sui lati (muri/pareti rampa, intatti). 0 = comportamento originale con contatto a riposo.")]
+        [Range(0f, 0.15f)]
+        private float groundContactClearance = 0.07f;
+
+        [SerializeField, Tooltip("Smorzamento minimo della sospensione, applicato in Awake SOLO con capsula flottante (groundContactClearance > 0). Senza contatto a riposo il kart sta solo sulla molla: col damping basso della scena (0.1) oscillerebbe visibilmente (~1.5 Hz). 9 con strength 90 da rapporto di smorzamento ~0.47, assestamento pulito. Se la sospensione in scena e' piu' alta del minimo, resta quella.")]
+        private float minSuspensionDamping = 9f;
+
+        [SerializeField, Tooltip("Forza massima (accelerazione) con cui la sospensione estesa puo' tirare il kart VERSO il terreno (molla bidirezionale, sulla distanza perpendicolare al piano). ATTIVA solo dove il damping e' attivo (piatto e pendenze dolci): serve a far seguire le discese senza contatto fisico. Su pendenze riperte (dampScale = 0) la sospensione e' push-only come prima della capsula flottante. 0 = mai tirare verso il basso.")]
+        private float suspensionMaxPullDown = 45f;
+
+        [SerializeField, Tooltip("Velocita' verticale massima (unita'/sec) consentita verso l'alto quando il kart e' grounded su terreno ~piatto (normale Y del hit >= groundFlatNormalThreshold), oltre alla salita legittima stimata dalla pendenza. Rete di sicurezza per gli impulsi +Y residui (con la capsula flottante su piatto non arriva piu' alcun contatto, quindi resta quasi sempre silente). Non interviene in aria, in discesa, sulle pendenze piu' riperte della soglia (rampe) ne' durante il lancio skate.")]
+        private float seamHopMaxVerticalSpeed = 0.6f;
+
+        [SerializeField, Tooltip("Soglia di planarita' della normale del terreno (componente Y) per il filtro anti ghost-bump: sotto questa soglia (pendenze riperte, rampe) la salita e' considerata legittima e il filtro non interviene.")]
+        [Range(0.5f, 1f)]
+        private float groundFlatNormalThreshold = 0.95f;
+
+        [SerializeField, Tooltip("Se attivo, quando il filtro anti ghost-bump capisce uno spike +Y scrive su Console i dettagli (velocita' originale e cap, hit piu' vicino con percorso nella gerarchia, posizione del kart). Al massimo un log ogni 0.5 secondi. Lascialo false nel gioco.")]
+        private bool logSeamHopDiagnostics = false;
+
         [Header("Wall Avoidance")]
         [SerializeField, Tooltip("Tempo di tolleranza in cui il contatto col muro resta attivo anche se la collisione sfarfalla.")]
         private float wallContactGraceTime = 0.2f;
@@ -480,10 +500,84 @@ namespace ArcadeKart.Core
             // interpola la posa del padre DOPO la nostra scrittura e trascina il
             // muso di ~30 gradi in un frame: il famoso "scatto verso il mezzo".
             rb.interpolation = RigidbodyInterpolation.None;
-            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            // Discrete, NON Continuous: il Continuous di Unity e' speculative
+            // CCD e sui bordi interni dei MeshCollider del terreno (le giunzioni
+            // fra i "Plane" del livello, anche complanari) genera contatti
+            // fantasma con impulsi verso l'alto = micciosalto alla traversata
+            // della giunzione, piu' vistoso in velocita'. A queste velocita'
+            // (max ~20 u/s con step 0.02s => ~0.4 u di spread per step) il
+            // tunneling e' improbabile: i muri sono box spessi e la parete
+            // skate e' rilevata da OnCollisionStay, non dalla CCD.
+            rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
             rb.constraints =
                 RigidbodyConstraints.FreezeRotationX |
                 RigidbodyConstraints.FreezeRotationZ;
+
+            // ===== Capsula flottante (anti ghost-bump alla radice) =====
+            // Su terreno piatto i bordi di giunzione fra i collider del terreno
+            // (box complanari tipo i "Base", fogli mesh) generano contatti il
+            // cui impulso/depenetrazione sposta il kart verso l'alto = salto
+            // visibile in velocita'. Alzando il FONDO della capsula (top
+            // invariato) su terreno piatto il kart cavalca solo sulla
+            // sospensione raycast e non tocca mai i bordi: niente contatto,
+            // niente pop. Il contatto fisico si ristabilisce da solo dove
+            // serve: su pendenze la superficie risale verso la capsula (entro
+            // pochi gradi), agli atterraggi, e sui LATI (muri e pareti skate:
+            // il contatto laterale non e' toccato dall'alzata del fondo).
+            // NB: con la molla da sola, un damping quasi nullo lascerebbe un'
+            // oscillazione visibile a riposo: sotto, tetto minimo al damping.
+            if (groundContactClearance > 0f)
+            {
+                // Salviamo il damping ORIGINALE (quello serializzato in scena,
+                // es. 0.1) PRIMA del tetto minimo: il ramo "pendenza riperta"
+                // di ApplySuspension replica la sospensione pre-fix e deve
+                // usare il valore di scena, non quello elevato (sulle pareti
+                // riperte il floor smorzerebbe la salita: bug gia' visto).
+                suspensionDampingSenzaTetto = suspensionDamping;
+                suspensionDamping = Mathf.Max(suspensionDamping, minSuspensionDamping);
+
+                CapsuleCollider[] bodyCapsules = GetComponentsInChildren<CapsuleCollider>(true);
+                for (int i = 0; i < bodyCapsules.Length; i++)
+                {
+                    CapsuleCollider capsule = bodyCapsules[i];
+                    if (capsule.isTrigger)
+                        continue;
+
+                    // L'altezza della capsula vive lungo il suo asse (direction
+                    // 0=X, 1=Y, 2=Z) nello spazio locale del suo transform: la
+                    // conversione metro->unita' locali passa per la lossyScale
+                    // sull'asse giusto (la scena usa scale non uniformi).
+                    Vector3 lossyScale = capsule.transform.lossyScale;
+                    float axisScale;
+                    if (capsule.direction == 0) axisScale = lossyScale.x;
+                    else if (capsule.direction == 1) axisScale = lossyScale.y;
+                    else axisScale = lossyScale.z;
+
+                    if (axisScale <= 0.0001f)
+                        continue;
+
+                    float clearanceLocal = groundContactClearance / axisScale;
+                    float newHeight = capsule.height - clearanceLocal;
+
+                    // Capsula valida solo con altezza >= 2*raggio: se l'alzata
+                    // la degenerasse, la lasciamo com'e' (meglio il bump che
+                    // una capsula rotta).
+                    if (newHeight < 2f * capsule.radius)
+                        continue;
+
+                    capsule.height = newHeight;
+
+                    // Teniamo FISSO il top: il fondo sale di clearance, quindi
+                    // il centro slitta verso l'alto di meta' dell'accorciatura.
+                    float centerShift = clearanceLocal * 0.5f;
+                    if (capsule.direction == 0)
+                        capsule.center += new Vector3(centerShift, 0f, 0f);
+                    else if (capsule.direction == 1)
+                        capsule.center += new Vector3(0f, centerShift, 0f);
+                    else
+                        capsule.center += new Vector3(0f, 0f, centerShift);
+                }
+            }
 
             input = GetComponent<IKartInput>();
             if (input == null)
@@ -678,6 +772,8 @@ namespace ArcadeKart.Core
                             // lancio al rate di skateRampVisualTurnSpeed
                             // gradi/sec. Se lo azzerassimo, il primo frame
                             // snap-erebbe subito al target = scatto visibile.
+                            if (logSeamHopDiagnostics)
+                                LogSkateLaunchStart(contact, n);
                         }
                         continue;
                     }
@@ -862,6 +958,21 @@ namespace ArcadeKart.Core
         private float lastGroundedTime;
         private bool hasGroundContactThisFrame;
 
+        // ===== Filtro anti ghost-bump (giunzioni del terreno) =====
+        // Con la capsula flottante (groundContactClearance > 0) su terreno
+        // piatto non arriva piu' nessun contatto fisico col terreno, quindi il
+        // clamp in UpdateVelocity e' una rete di sicurezza per gli impulsi +Y
+        // residui (piccoli scalini, giunzioni su dolci pendenze). Qui vive
+        // solo il throttling del log diagnostico.
+        private float lastSeamHopLogTime = -999f;
+
+        // Damping sospensione ORIGINALE (serializzato in scena, es. 0.1),
+        // salvato in Awake PRIMA del tetto minimo minSuspensionDamping. Usato
+        // SOLO dal ramo pre-fix di ApplySuspension per le pendenze riperte:
+        // li' il damping elevato smorzerebbe la salita (velocita' terminale
+        // di caduta gravity/damping e molla annullata oltre vy ~ spring/damp).
+        private float suspensionDampingSenzaTetto;
+
         private float lastWallContactTime = -999f;
         private Vector3 steepWallNormal;
         private Vector3 steepWallPoint;
@@ -941,6 +1052,12 @@ private void UpdateSkateRampLaunchState()
             // air-control per tutto il volo, come richiesto.
             if (IsGrounded && hasGroundContactThisFrame)
             {
+                if (logSeamHopDiagnostics)
+                    Debug.Log(
+                        $"[KartController] Skate launch END: vy {rb.linearVelocity.y:F2} " +
+                        $"planar {new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude:F2} " +
+                        $"pos {transform.position:F1}",
+                        this);
                 skateRampLaunch = false;
             }
         }
@@ -984,17 +1101,74 @@ private void UpdateSkateRampLaunchState()
             if (!hasGroundContactThisFrame)
                 return;
 
-            float compression = Mathf.Clamp(rideHeight - groundHit.distance, 0f, rideHeight);
-            if (compression <= 0f)
-                return;
+            Vector3 groundNormal = groundHit.normal;
+            float dampScale = Mathf.Clamp01((groundNormal.y - 0.34f) / 0.36f);
 
+            // ===== Pendenze riperte (oltre ~70 gradi): sospensione PRE-FIX =====
+            // Replichiamo ESATTAMENTE la sospensione del commit 6bbcb1c
+            // (compression sulla distanza verticale clampata, mai forza verso
+            // il basso, damping debole originale sulla vy assoluta, early
+            // return se la forza non e' positiva): e' la dinamica con cui le
+            // rampe/pareti skate si sono sempre comportate. Le varianti
+            // slope-aware (perpendicolare/deviazione/pull-down) cambiano il
+            // feel dell'arrivo alla parete e non sono volute qui.
+            if (dampScale <= 0f)
+            {
+                float compressionPreFix =
+                    Mathf.Clamp(rideHeight - groundHit.distance, 0f, rideHeight);
+                if (compressionPreFix <= 0f)
+                    return;
+
+                float totalPreFix =
+                    compressionPreFix * suspensionStrength
+                    - rb.linearVelocity.y * suspensionDampingSenzaTetto;
+                if (totalPreFix <= 0f)
+                    return;
+
+                rb.AddForce(Vector3.up * totalPreFix, ForceMode.Acceleration);
+                return;
+            }
+
+            // ===== Piatto e pendenze dolci: sospensione slope-aware =====
+            // Molla BIDIREZIONALE sulla distanza PERPENDICOLARE al piano:
+            // compression > 0 = schiacciata (spinge in su), < 0 = estesa (tira
+            // VERSO il terreno). Il cast e' verticale: su una pendenza la
+            // distanza verticale e' gonfiata di 1/cos(theta) e usarla cosi'
+            // com'e' rende la molla falsamente "estesa" man mano che la
+            // pendenza cresce; moltiplicare per normal.y riporta la quota
+            // perpendicolare reale. Con la capsula flottante il contatto a
+            // riposo su piatto non c'e': senza il tiro verso il basso, in
+            // discesa il kart planerebbe invece di inseguirlo.
+            float perpendicularDistance = groundHit.distance * groundNormal.y;
+            float compression = rideHeight - perpendicularDistance;
             float springForce = compression * suspensionStrength;
-            float verticalVelocity = Vector3.Dot(rb.linearVelocity, Vector3.up);
-            float dampingForce = -verticalVelocity * suspensionDamping;
+
+            // Smorzamento sulla DEVIAZIONE dalla vy che seguirebbe la pendenza
+            // (NON sulla vy assoluta): col damping sulla vy assoluta la caduta
+            // aveva una velocita' terminale gravity/damping (in discesa il kart
+            // "vola" perche' non scende abbastanza) e la molla veniva annullata
+            // appena vy superava spring/damping (rampa imprendibile).
+            // expectedVy e' la vy necessaria per scorrere sulla superficie
+            // sotto il kart: negativa in discesa, positiva in salita, 0 su
+            // piatto. (dampScale > 0 e' garantito qui: le pendenze riperte
+            // sono uscite sopra col ramo pre-fix.)
+            float safeNy = Mathf.Max(0.05f, groundNormal.y);
+            float expectedVy =
+                -(rb.linearVelocity.x * groundNormal.x +
+                  rb.linearVelocity.z * groundNormal.z) / safeNy;
+            float deviationVy = rb.linearVelocity.y - expectedVy;
+            float dampingForce = Mathf.Clamp(
+                -deviationVy * suspensionDamping * dampScale,
+                -gravity,
+                gravity
+            );
+
             float totalForce = springForce + dampingForce;
 
-            if (totalForce <= 0f)
-                return;
+            // Tetto al trascinamento verso il basso (questo ramo gira solo su
+            // piatto/pendenze dolci, dove inseguire il terreno e' voluto: le
+            // pendenze riperte sono uscite sopra col ramo pre-fix push-only).
+            totalForce = Mathf.Max(totalForce, -suspensionMaxPullDown);
 
             rb.AddForce(Vector3.up * totalForce, ForceMode.Acceleration);
         }
@@ -1434,6 +1608,46 @@ private void UpdateSkateRampLaunchState()
             float lateralSpeed = localVelocity.x;
             float forwardSpeed = localVelocity.z;
             float verticalSpeed = rb.linearVelocity.y;
+
+            // Rete di sicurezza anti ghost-bump (giunzioni del terreno): se un
+            // contatto fisico applica un impulso +Y mentre siamo grounded su
+            // terreno ~piatto, lo limitiamo alla salita legittima attesa dalla
+            // pendenza dell'hit (speed planare * tan(angolo)) piu' una piccola
+            // tolleranza. Con la capsula flottante (groundContactClearance > 0)
+            // su terreno piatto non arriva piu' alcun contatto, quindi il
+            // filtro resta quasi sempre silente: copre i casi residui (scalini
+            // piccoli, giunzioni su dolci pendenze). Il gate usa la normale
+            // dell'hit PIU' VICINO: su pendenze riperte (rampe) e' inclinata e
+            // spegne il filtro, cosi' la salita legittima resta libera; la
+            // discesa (-Y), l'aria e il lancio skate non sono toccati.
+            // Requisito AGGIUNTIVO: la molla deve essere compressa (kart
+            // realmente APPOGGIATO, quota perpendicolare sotto rideHeight).
+            // Senza questo, l'arco di lancio skate oltre il bordo della parete
+            // vedrebbe il piatto della piattaforma sotto di lui (cast a d
+            // piccola) e verrebbe cap-pato mentre sale: vy > 0 + hit piatto
+            // NON bastano a dire "sto facendo un ghost bump", serve il
+            // supporto. I ghost bump reali avvengono a kart appoggiato
+            // (log: d 0.11-0.13 -> compression ~0.28 > 0).
+            float supportCompression =
+                rideHeight - groundHit.distance * groundHit.normal.y;
+            if (IsGrounded
+                && hasGroundContactThisFrame
+                && supportCompression > 0f
+                && groundHit.normal.y >= groundFlatNormalThreshold
+                && verticalSpeed > 0f)
+            {
+                float planarSpd = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
+                float ny = Mathf.Clamp(groundHit.normal.y, 0.05f, 1f);
+                float expectedClimb =
+                    planarSpd * Mathf.Sqrt(Mathf.Max(0f, 1f - ny * ny)) / ny;
+                float maxUp = expectedClimb + seamHopMaxVerticalSpeed;
+                if (verticalSpeed > maxUp)
+                {
+                    if (logSeamHopDiagnostics)
+                        LogSeamHopSpike(verticalSpeed, maxUp, planarSpd);
+                    verticalSpeed = maxUp;
+                }
+            }
 
             float absAngle = Mathf.Abs(currentSignedAngleToDesired);
             float targetForwardSpeed = desiredMoveAmount * currentPlanarMax;
@@ -1940,6 +2154,18 @@ private void UpdateSkateRampLaunchState()
                 if (hit.collider.transform.root == transform.root)
                     continue;
 
+                // Hit a distanza ~zero = la sfera PARTIVA gia' sovrapposta al
+                // collider: NON e' terreno sotto i piedi, e' un piano di
+                // LATO/SOPRA il kart. Caso tipico: durante la scalata della
+                // parete skate il centro del kart passa alla quota della
+                // piattaforma piana in cima (d = 0) e lo SphereCast la
+                // becca -> falso IsGrounded -> il lancio esce a meta' salita
+                // e il clamp anti ghost-bump uccide la vy (log: vy 10-12
+                // cap-pati a 0.6 con d 0,00). Un vero supporto ha sempre
+                // della corsa (d ~0.05-0.15 a riposo).
+                if (hit.distance <= 0.01f)
+                    continue;
+
                 float slopeAngle = Vector3.Angle(hit.normal, Vector3.up);
                 bool walkable = slopeAngle <= maxGroundSlopeAngle;
 
@@ -1961,6 +2187,74 @@ private void UpdateSkateRampLaunchState()
             }
 
             return found;
+        }
+
+        // Diagnostica anti ghost-bump: chiamata SOLO se logSeamHopDiagnostics
+        // e' attivo, quando uno spike +Y supera il cap consentito. Throttled a
+        // un log ogni 0.5 secondi per non intasare la Console in playtest.
+        // I nomi dei collider sono con percorso completo: nel livello ci sono
+        // molti oggetti con lo stesso nome ("Plane (15)", "Base (2)"...), il
+        // percorso serve a capire QUALE copia e' colpevole.
+        private void LogSeamHopSpike(float originalVy, float cappedVy, float planarSpd)
+        {
+            if (Time.time - lastSeamHopLogTime < 0.5f)
+                return;
+            lastSeamHopLogTime = Time.time;
+
+            string closestName =
+                groundHit.collider != null ? HierarchyPath(groundHit.collider) : "<nessuno>";
+
+            Debug.Log(
+                $"[KartController] Ghost-bump cap: vy {originalVy:F2} -> {cappedVy:F2} " +
+                $"(planar {planarSpd:F2}) | hit piu' vicino: '{closestName}' " +
+                $"(normal.y {groundHit.normal.y:F2}, d {groundHit.distance:F2}) | " +
+                $"pos {transform.position:F1}",
+                this);
+        }
+
+        private static string HierarchyPath(Component component)
+        {
+            if (component == null)
+                return "<null>";
+
+            string path = component.name;
+            Transform t = component.transform.parent;
+            while (t != null)
+            {
+                path = t.name + "/" + path;
+                t = t.parent;
+            }
+            return path;
+        }
+
+        // Diagnostica del lancio skate: chiamata SOLO se
+        // logSeamHopDiagnostics e' attivo, al PRIMO contatto riperto che fa
+        // scattare il lancio. Confronta la velocity scritta dal controller
+        // (lastSetVelocity, quella catturata come launchVelocity) con quella
+        // reale post-solver: se la scritta e' dominata dalla componente
+        // orizzontale dentro-il-muro, il lancio partira' debole (il muro la
+        // azzera e il kart sale solo con la vy residua). Throttled come il
+        // log anti ghost-bump per non intasare la Console.
+        private void LogSkateLaunchStart(ContactPoint contact, Vector3 wallNormal)
+        {
+            if (Time.time - lastSeamHopLogTime < 0.5f)
+                return;
+            lastSeamHopLogTime = Time.time;
+
+            Collider wallCollider = contact.otherCollider;
+            string wallName = wallCollider != null ? HierarchyPath(wallCollider) : "<null>";
+            int wallLayer = wallCollider != null ? wallCollider.gameObject.layer : -1;
+            float wallAngle = Vector3.Angle(wallNormal, Vector3.up);
+            float planarLaunch =
+                new Vector2(launchVelocity.x, launchVelocity.z).magnitude;
+
+            Debug.Log(
+                $"[KartController] Skate launch START: muro '{wallName}' " +
+                $"(layer {wallLayer}, {wallAngle:F0} gradi) | " +
+                $"lastSetVelocity {lastSetVelocity} (planar {planarLaunch:F2}) | " +
+                $"rb.linearVelocity {rb.linearVelocity} | " +
+                $"frozenPitch {frozenPitch:F1} | pos {transform.position:F1}",
+                this);
         }
 
         private bool TryGetGroundPoint(Transform probe, out Vector3 point)
