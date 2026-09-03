@@ -311,9 +311,6 @@ namespace ArcadeKart.Core
         [Range(0.5f, 1f)]
         private float groundFlatNormalThreshold = 0.95f;
 
-        [SerializeField, Tooltip("Se attivo, quando il filtro anti ghost-bump capisce uno spike +Y scrive su Console i dettagli (velocita' originale e cap, hit piu' vicino con percorso nella gerarchia, posizione del kart). Al massimo un log ogni 0.5 secondi. Lascialo false nel gioco.")]
-        private bool logSeamHopDiagnostics = false;
-
         [Header("Wall Avoidance")]
         [SerializeField, Tooltip("Tempo di tolleranza in cui il contatto col muro resta attivo anche se la collisione sfarfalla.")]
         private float wallContactGraceTime = 0.2f;
@@ -526,14 +523,16 @@ namespace ArcadeKart.Core
             // il contatto laterale non e' toccato dall'alzata del fondo).
             // NB: con la molla da sola, un damping quasi nullo lascerebbe un'
             // oscillazione visibile a riposo: sotto, tetto minimo al damping.
+            // Salviamo il damping ORIGINALE (quello serializzato in scena,
+            // es. 0.1) PRIMA del tetto minimo: il ramo "pendenza riperta"
+            // di ApplySuspension replica la sospensione pre-fix e deve usare
+            // il valore di scena, non quello elevato (sulle pareti riperte il
+            // floor smorzerebbe la salita: bug gia' visto). Fuori dal blocco
+            // clearance: deve valere anche se un domani la clearance torna 0.
+            suspensionDampingSenzaTetto = suspensionDamping;
+
             if (groundContactClearance > 0f)
             {
-                // Salviamo il damping ORIGINALE (quello serializzato in scena,
-                // es. 0.1) PRIMA del tetto minimo: il ramo "pendenza riperta"
-                // di ApplySuspension replica la sospensione pre-fix e deve
-                // usare il valore di scena, non quello elevato (sulle pareti
-                // riperte il floor smorzerebbe la salita: bug gia' visto).
-                suspensionDampingSenzaTetto = suspensionDamping;
                 suspensionDamping = Mathf.Max(suspensionDamping, minSuspensionDamping);
 
                 CapsuleCollider[] bodyCapsules = GetComponentsInChildren<CapsuleCollider>(true);
@@ -772,8 +771,6 @@ namespace ArcadeKart.Core
                             // lancio al rate di skateRampVisualTurnSpeed
                             // gradi/sec. Se lo azzerassimo, il primo frame
                             // snap-erebbe subito al target = scatto visibile.
-                            if (logSeamHopDiagnostics)
-                                LogSkateLaunchStart(contact, n);
                         }
                         continue;
                     }
@@ -962,9 +959,7 @@ namespace ArcadeKart.Core
         // Con la capsula flottante (groundContactClearance > 0) su terreno
         // piatto non arriva piu' nessun contatto fisico col terreno, quindi il
         // clamp in UpdateVelocity e' una rete di sicurezza per gli impulsi +Y
-        // residui (piccoli scalini, giunzioni su dolci pendenze). Qui vive
-        // solo il throttling del log diagnostico.
-        private float lastSeamHopLogTime = -999f;
+        // residui (piccoli scalini, giunzioni su dolci pendenze).
 
         // Damping sospensione ORIGINALE (serializzato in scena, es. 0.1),
         // salvato in Awake PRIMA del tetto minimo minSuspensionDamping. Usato
@@ -1052,12 +1047,6 @@ private void UpdateSkateRampLaunchState()
             // air-control per tutto il volo, come richiesto.
             if (IsGrounded && hasGroundContactThisFrame)
             {
-                if (logSeamHopDiagnostics)
-                    Debug.Log(
-                        $"[KartController] Skate launch END: vy {rb.linearVelocity.y:F2} " +
-                        $"planar {new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude:F2} " +
-                        $"pos {transform.position:F1}",
-                        this);
                 skateRampLaunch = false;
             }
         }
@@ -1642,11 +1631,7 @@ private void UpdateSkateRampLaunchState()
                     planarSpd * Mathf.Sqrt(Mathf.Max(0f, 1f - ny * ny)) / ny;
                 float maxUp = expectedClimb + seamHopMaxVerticalSpeed;
                 if (verticalSpeed > maxUp)
-                {
-                    if (logSeamHopDiagnostics)
-                        LogSeamHopSpike(verticalSpeed, maxUp, planarSpd);
                     verticalSpeed = maxUp;
-                }
             }
 
             float absAngle = Mathf.Abs(currentSignedAngleToDesired);
@@ -2140,7 +2125,6 @@ private void UpdateSkateRampLaunchState()
             );
 
             float bestWalkableDistance = float.MaxValue;
-            float bestAnyDistance = float.MaxValue;
             bool found = false;
 
 
@@ -2160,20 +2144,13 @@ private void UpdateSkateRampLaunchState()
                 // parete skate il centro del kart passa alla quota della
                 // piattaforma piana in cima (d = 0) e lo SphereCast la
                 // becca -> falso IsGrounded -> il lancio esce a meta' salita
-                // e il clamp anti ghost-bump uccide la vy (log: vy 10-12
-                // cap-pati a 0.6 con d 0,00). Un vero supporto ha sempre
-                // della corsa (d ~0.05-0.15 a riposo).
+                // e il clamp anti ghost-bump uccide la vy. Un vero supporto
+                // ha sempre della corsa (d ~0.05-0.15 a riposo).
                 if (hit.distance <= 0.01f)
                     continue;
 
                 float slopeAngle = Vector3.Angle(hit.normal, Vector3.up);
                 bool walkable = slopeAngle <= maxGroundSlopeAngle;
-
-                if (hit.distance < bestAnyDistance)
-                {
-                    bestAnyDistance = hit.distance;
-
-                }
 
                 if (!walkable)
                     continue;
@@ -2187,74 +2164,6 @@ private void UpdateSkateRampLaunchState()
             }
 
             return found;
-        }
-
-        // Diagnostica anti ghost-bump: chiamata SOLO se logSeamHopDiagnostics
-        // e' attivo, quando uno spike +Y supera il cap consentito. Throttled a
-        // un log ogni 0.5 secondi per non intasare la Console in playtest.
-        // I nomi dei collider sono con percorso completo: nel livello ci sono
-        // molti oggetti con lo stesso nome ("Plane (15)", "Base (2)"...), il
-        // percorso serve a capire QUALE copia e' colpevole.
-        private void LogSeamHopSpike(float originalVy, float cappedVy, float planarSpd)
-        {
-            if (Time.time - lastSeamHopLogTime < 0.5f)
-                return;
-            lastSeamHopLogTime = Time.time;
-
-            string closestName =
-                groundHit.collider != null ? HierarchyPath(groundHit.collider) : "<nessuno>";
-
-            Debug.Log(
-                $"[KartController] Ghost-bump cap: vy {originalVy:F2} -> {cappedVy:F2} " +
-                $"(planar {planarSpd:F2}) | hit piu' vicino: '{closestName}' " +
-                $"(normal.y {groundHit.normal.y:F2}, d {groundHit.distance:F2}) | " +
-                $"pos {transform.position:F1}",
-                this);
-        }
-
-        private static string HierarchyPath(Component component)
-        {
-            if (component == null)
-                return "<null>";
-
-            string path = component.name;
-            Transform t = component.transform.parent;
-            while (t != null)
-            {
-                path = t.name + "/" + path;
-                t = t.parent;
-            }
-            return path;
-        }
-
-        // Diagnostica del lancio skate: chiamata SOLO se
-        // logSeamHopDiagnostics e' attivo, al PRIMO contatto riperto che fa
-        // scattare il lancio. Confronta la velocity scritta dal controller
-        // (lastSetVelocity, quella catturata come launchVelocity) con quella
-        // reale post-solver: se la scritta e' dominata dalla componente
-        // orizzontale dentro-il-muro, il lancio partira' debole (il muro la
-        // azzera e il kart sale solo con la vy residua). Throttled come il
-        // log anti ghost-bump per non intasare la Console.
-        private void LogSkateLaunchStart(ContactPoint contact, Vector3 wallNormal)
-        {
-            if (Time.time - lastSeamHopLogTime < 0.5f)
-                return;
-            lastSeamHopLogTime = Time.time;
-
-            Collider wallCollider = contact.otherCollider;
-            string wallName = wallCollider != null ? HierarchyPath(wallCollider) : "<null>";
-            int wallLayer = wallCollider != null ? wallCollider.gameObject.layer : -1;
-            float wallAngle = Vector3.Angle(wallNormal, Vector3.up);
-            float planarLaunch =
-                new Vector2(launchVelocity.x, launchVelocity.z).magnitude;
-
-            Debug.Log(
-                $"[KartController] Skate launch START: muro '{wallName}' " +
-                $"(layer {wallLayer}, {wallAngle:F0} gradi) | " +
-                $"lastSetVelocity {lastSetVelocity} (planar {planarLaunch:F2}) | " +
-                $"rb.linearVelocity {rb.linearVelocity} | " +
-                $"frozenPitch {frozenPitch:F1} | pos {transform.position:F1}",
-                this);
         }
 
         private bool TryGetGroundPoint(Transform probe, out Vector3 point)
