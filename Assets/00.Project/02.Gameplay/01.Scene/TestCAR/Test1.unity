@@ -20821,7 +20821,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.3365226, y: 1.2357925, z: 0.128295}
+  - {x: -0.3389972, y: 1.2375882, z: 0.12573811}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -20970,7 +20970,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.34297106, y: 1.2341009, z: -0.17490906}
+  - {x: -0.34768474, y: 1.2366168, z: -0.17760248}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -21119,7 +21119,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.44099954, y: 0.73839206, z: 0.10188954}
+  - {x: -0.42866877, y: 0.7377116, z: 0.09505448}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -21268,7 +21268,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.43942845, y: 0.73554057, z: -0.044615854}
+  - {x: -0.4258139, y: 0.73562056, z: -0.05402849}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -30861,6 +30861,7 @@ GameObject:
   - component: {fileID: 1847835830}
   - component: {fileID: 1847835832}
   - component: {fileID: 1847835831}
+  - component: {fileID: 1847835833}
   m_Layer: 0
   m_Name: cameraascensore
   m_TagString: Untagged
@@ -30931,6 +30932,32 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 8.617199, y: 3.318322, z: 8.316725}
   m_Center: {x: 0.07141304, y: 1.159161, z: 0.36630154}
+--- !u!114 &1847835833
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1847835829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17332d520abef26219ba62edea3344c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  requiredTag: Player
+  oneShot: 0
+  usaReverb: 1
+  zonaReverb: {fileID: 0}
+  presetReverb: 3
+  raggioReverbInterno: 2
+  raggioReverbEsterno: 6
+  intensitaReverb: 10000
+  velocitaFadeReverb: 4
+  usaAudioBG: 1
+  sorgenteBG: {fileID: 0}
+  clipBG: {fileID: 8300000, guid: 9372d4af663b1b0d19db62704cb2ddcd, type: 3}
+  volumeBG: 0.287
+  velocitaFadeBG: 2
 --- !u!1 &1871706439
 GameObject:
   m_ObjectHideFlags: 0
