@@ -378,6 +378,12 @@ namespace ArcadeKart.Core
         public float CurrentSpeed { get; private set; }
         public float MaxSpeed => maxSpeed;
 
+        // Peso della fase guida (0 = camminata, 1 = corsa) gia' smorzato dal
+        // controller: e' lo stesso PesoCorsa interno con cui si fondono i set
+        // di grip/sterzo/velocity. Esposto per chi deve seguire la fase da
+        // fuori (es. AudioRuoteKart) senza duplicarne la logica.
+        public float PesoCorsaFase => PesoCorsa;
+
         // Modalita' AI: vedi tooltip di aiSteeringMode. Letta/scritta dal NPC
         // (EnemyKart) in Awake per attivare la sterzata costante. Pubblica
         // perche' deve essere leggibile anche da fuori (es. debug).
