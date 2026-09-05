@@ -7,11 +7,19 @@ namespace ArcadeKart.Gameplay
     /// il kart (tag Player) attraversa il volume, due blocchi indipendenti
     /// possono attivarsi e tornare allo stato di partenza all'uscita.
     /// - Zona effetto: una AudioReverbZone (reverb/eco, es. galleria o grotta)
-    ///   si accende con fade dell'intensita' e si spegne all'uscita.
+    ///   figlia dell'AudioListener (la camera che segue il kart) si accende
+    ///   con fade dell'intensita' e si spegne all'uscita. Le Reverb Zone di
+    ///   Unity si valutano sulla posizione del LISTENER, non delle sorgenti:
+    ///   col listener a distanza zero dal centro la reverb e' piena in tutto
+    ///   il trigger, qualsiasi forma/dimensione abbia il collider, e tocca
+    ///   anche l'audio BG 2D. (Versioni precedenti agganciavano la zona al
+    ///   kart o la lasciavano fissa al centro del trigger: in entrambi i
+    ///   casi la camera/listener restava fuori dai raggi e l'effetto non si
+    ///   sentiva o solo in parte.)
     /// - Audio BG: una sorgente NON spazializzata (musica di zona) parte in
     ///   fade-in e sfuma in pausa all'uscita.
-    /// I componenti mancanti vengono creati in automatico sul trigger, come
-    /// le sorgenti di AudioRuoteKart.
+    /// I componenti mancanti vengono creati in automatico, come le sorgenti
+    /// di AudioRuoteKart.
     /// </summary>
     [RequireComponent(typeof(Collider))]
     public class TriggerAudio : MonoBehaviour
@@ -24,14 +32,20 @@ namespace ArcadeKart.Gameplay
         private bool oneShot = false;
 
         [Header("Zona effetto (reverb/eco)")]
-        [SerializeField, Tooltip("Se attivo, all'ingresso accende una AudioReverbZone con fade (l'audio del kart dentro la zona suona con reverb).")]
+        [SerializeField, Tooltip("Se attivo, all'ingresso accende una AudioReverbZone con fade (mentre il trigger e' attivo l'audio in scena suona con reverb/eco).")]
         private bool usaReverb = true;
 
-        [SerializeField, Tooltip("AudioReverbZone da controllare; se vuota viene creata in automatico su questo GameObject (raggi adattati al collider).")]
+        [SerializeField, Tooltip("AudioReverbZone da controllare; se vuota, al primo ingresso viene creata in automatico come figlia dell'AudioListener (reverb piena in tutto il trigger). Se la assegni tu, il trigger ne controlla solo accensione e fade: posizionala dove passa la CAMERA (le Reverb Zone si valutano sul listener, non sul kart).")]
         private AudioReverbZone zonaReverb;
 
         [SerializeField, Tooltip("Preset della zona (Cave, Hallway, ecc.); riapplicato a ogni ingresso, quindi vale come impostazione del trigger.")]
         private AudioReverbPreset presetReverb = AudioReverbPreset.Cave;
+
+        [SerializeField, Tooltip("Solo zona automatica: raggio interno della zona creata sul listener. Col listener a distanza zero dal centro il valore conta poco; serve solo da margine.")]
+        private float raggioReverbInterno = 2f;
+
+        [SerializeField, Tooltip("Solo zona automatica: raggio esterno della zona creata sul listener (oltre questo raggio la reverb svanisce).")]
+        private float raggioReverbEsterno = 6f;
 
         [SerializeField, Tooltip("Intensita' di reverb a regime (0 = nessuna, 10000 = massima)."), Range(0f, 10000f)]
         private float intensitaReverb = 9000f;
@@ -77,22 +91,12 @@ namespace ArcadeKart.Gameplay
 
         private void Awake()
         {
-            // Zona reverb automatica: creata sul trigger con il preset scelto
-            // e i raggi adattati al collider, cosi' copre tutto il volume del
-            // trigger anche se questo e' un box lungo (es. una galleria).
-            if (usaReverb && zonaReverb == null)
-            {
-                zonaReverb = gameObject.AddComponent<AudioReverbZone>();
-                zonaReverb.reverbPreset = presetReverb;
-
-                float raggio = CalcolaRaggioCollider();
-                zonaReverb.maxDistance = raggio;
-                zonaReverb.minDistance = raggio * 0.9f;
-            }
-
+            // La zona reverb automatica NON si crea qui: in Awake non si sa
+            // ancora dove sta l'AudioListener di scena. Viene creata al
+            // primo contatto come figlia del listener (AssicuraZonaSul-
+            // Listener). Una zona assegnata a mano parte comunque spenta.
             if (zonaReverb != null)
             {
-                // Parte spenta: il fade la accende solo al contatto col kart.
                 zonaReverb.reverb = 0;
                 zonaReverb.enabled = false;
             }
@@ -126,12 +130,17 @@ namespace ArcadeKart.Gameplay
             if (!string.IsNullOrEmpty(requiredTag) && !other.CompareTag(requiredTag))
                 return;
 
-            if (usaReverb && zonaReverb != null)
+            if (usaReverb)
             {
-                zonaReverb.reverbPreset = presetReverb;
-                zonaReverb.enabled = true;
-                fadeReverbTarget = 1f;
-                reverbAttiva = true;
+                AssicuraZonaSulListener();
+
+                if (zonaReverb != null)
+                {
+                    zonaReverb.reverbPreset = presetReverb;
+                    zonaReverb.enabled = true;
+                    fadeReverbTarget = 1f;
+                    reverbAttiva = true;
+                }
             }
 
             if (usaAudioBG && sorgenteBG != null && sorgenteBG.clip != null)
@@ -232,18 +241,37 @@ namespace ArcadeKart.Gameplay
             fadeBgTarget = 0f;
         }
 
-        // Raggio che copre l'intero collider del trigger: la meta' diagonale
-        // dei bounds mondiali. Per uno sphere/capsule e' il raggio reale, per
-        // un box ruotato lo supera leggermente (AABB): meglio coprire troppo.
-        private float CalcolaRaggioCollider()
+        // Crea la zona reverb come figlia dell'AudioListener (una sola
+        // volta), con i raggi fissi configurabili. Le Reverb Zone di Unity
+        // si valutano sulla posizione del LISTENER (nel progetto: la camera
+        // che segue il kart), non delle sorgenti: col listener a distanza
+        // zero dal centro la reverb e' sempre piena mentre il trigger e'
+        // attivo, per qualsiasi forma/dimensione del collider. Se il
+        // riferimento esiste ma punta a una zona distrutta, viene ricreata.
+        private void AssicuraZonaSulListener()
         {
-            Collider c = GetComponent<Collider>();
-            if (c == null)
-                return 20f;
+            if (zonaReverb != null)
+                return;
 
-            Vector3 estesi = c.bounds.extents;
-            float raggio = estesi.magnitude;
-            return raggio > 0.01f ? raggio : 20f;
+            AudioListener listener = FindFirstObjectByType<AudioListener>(FindObjectsInactive.Exclude);
+            if (listener == null && Camera.main != null)
+                listener = Camera.main.GetComponent<AudioListener>();
+
+            if (listener == null)
+            {
+                Debug.LogWarning("[TriggerAudio] Nessun AudioListener in scena: la reverb non puo' funzionare.", this);
+                return;
+            }
+
+            GameObject oggetto = new GameObject("ZonaReverbListener");
+            oggetto.transform.SetParent(listener.transform, false);
+
+            zonaReverb = oggetto.AddComponent<AudioReverbZone>();
+            zonaReverb.reverbPreset = presetReverb;
+            zonaReverb.minDistance = raggioReverbInterno;
+            zonaReverb.maxDistance = raggioReverbEsterno;
+            zonaReverb.reverb = 0;
+            zonaReverb.enabled = false;
         }
     }
 }
