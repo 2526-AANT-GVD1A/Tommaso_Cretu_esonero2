@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace ArcadeKart.Utility
 {
@@ -68,6 +69,17 @@ namespace ArcadeKart.Utility
 
             [Tooltip("Quanto velocemente il FOV raggiunge il valore desiderato.")]
             public float fovDamping = 6f;
+
+            [Header("Post Processing")]
+            [Tooltip("Volume URP i cui effetti sono attivi in questa fase (es. bianco e nero, bloom, vignetta). Vuoto = questa fase non attiva effetti. Vengono gestiti solo i volume assegnati ad almeno una fase.")]
+            public Volume postProcessVolume;
+
+            [Tooltip("Intensita' del volume in questa fase (0 = spento, 1 = pieno).")]
+            [Range(0f, 1f)]
+            public float volumeWeight = 1f;
+
+            [Tooltip("Quanto velocemente l'intensita' del volume raggiunge il valore desiderato.")]
+            public float volumeDamping = 6f;
         }
 
         #region Inspector
@@ -141,6 +153,8 @@ namespace ArcadeKart.Utility
             if (cam == null)
                 cam = Camera.main;
 
+            BuildManagedVolumes();
+
             currentPhase = FindPhase(startingPhaseId);
 
             if (currentPhase == null && fallbackToFirstPhase && phases.Count > 0)
@@ -155,6 +169,11 @@ namespace ArcadeKart.Utility
 
             if (cam != null)
                 cam.fieldOfView = currentPhase.fieldOfView;
+
+            // Allinea subito i pesi dei volume alla fase iniziale: evita che
+            // effetti lasciati a peso 1 in scena facciano un fade-out visibile
+            // nei primi frame.
+            UpdateVolumeWeights(true);
         }
 
         // Follow in FixedUpdate (non in LateUpdate): il target e' un Rigidbody
@@ -197,6 +216,8 @@ namespace ArcadeKart.Utility
                 float fovT = 1f - Mathf.Exp(-Mathf.Max(0.01f, currentPhase.fovDamping) * Time.deltaTime);
                 cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, currentPhase.fieldOfView, fovT);
             }
+
+            UpdateVolumeWeights(false);
         }
 
         #endregion
@@ -206,6 +227,50 @@ namespace ArcadeKart.Utility
         private Camera cam;
         private bool warningLogged;
         private CameraPhase currentPhase;
+
+        // Volume referenziati da almeno una fase: sono gli unici che questo
+        // componente guida. Volume estranei in scena non vengono toccati.
+        private readonly List<Volume> managedVolumes = new List<Volume>();
+
+        private void BuildManagedVolumes()
+        {
+            managedVolumes.Clear();
+
+            for (int i = 0; i < phases.Count; i++)
+            {
+                Volume volume = phases[i].postProcessVolume;
+
+                if (volume == null || managedVolumes.Contains(volume))
+                    continue;
+
+                managedVolumes.Add(volume);
+            }
+        }
+
+        // Porta ogni volume gestito al peso della fase corrente: pieno se e'
+        // il volume della fase, zero altrimenti. Con immediate=true salta il
+        // damping (snap, stato iniziale).
+        private void UpdateVolumeWeights(bool immediate)
+        {
+            if (managedVolumes.Count == 0 || currentPhase == null)
+                return;
+
+            float t = 1f - Mathf.Exp(-Mathf.Max(0.01f, currentPhase.volumeDamping) * Time.deltaTime);
+
+            for (int i = 0; i < managedVolumes.Count; i++)
+            {
+                Volume volume = managedVolumes[i];
+
+                if (volume == null)
+                    continue;
+
+                float target = currentPhase.postProcessVolume == volume
+                    ? currentPhase.volumeWeight
+                    : 0f;
+
+                volume.weight = immediate ? target : Mathf.Lerp(volume.weight, target, t);
+            }
+        }
 
         private CameraPhase FindPhase(string phaseId)
         {
@@ -244,6 +309,8 @@ namespace ArcadeKart.Utility
 
             if (cam != null)
                 cam.fieldOfView = currentPhase.fieldOfView;
+
+            UpdateVolumeWeights(true);
         }
 
         private Quaternion GetDesiredRotation(CameraPhase phase)
