@@ -21801,6 +21801,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   oggettoMenu: {fileID: 1236611312}
+  kart: {fileID: 1433482422}
   logoSprite: {fileID: 0}
   frazioneAltezzaLogo: 0.4
   coloreSfondo: {r: 0, g: 0, b: 0, a: 1}

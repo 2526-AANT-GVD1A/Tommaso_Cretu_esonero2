@@ -38,6 +38,9 @@ namespace ArcadeKart.Menu
         [SerializeField, Tooltip("Oggetto del menu da attivare a fine intro (Menu_Inizio). Durante l'intro resta disattivato.")]
         private GameObject oggettoMenu;
 
+        [SerializeField, Tooltip("KartController del giocatore da congelare durante la intro. Se vuoto, cerca il primo KartController attivo col tag Player.")]
+        private KartController kart;
+
         [Header("Contenuti (facoltativi)")]
         [SerializeField, Tooltip("Logo da mostrare sopra il velo. Vuoto = solo velo colorato.")]
         private Sprite logoSprite;
@@ -103,10 +106,7 @@ namespace ArcadeKart.Menu
             // quindi MenuControls non puo' farlo). A fine intro e' il
             // MenuControls.OnEnable del menu che si attiva a ricongelarlo e
             // liberare il cursore: identico a LevelManager.TornaAlMenu.
-            KartController kart = null;
-            GameObject player = GameObject.FindWithTag("Player");
-            if (player != null)
-                kart = player.GetComponent<KartController>();
+            RisolviKart();
 
             if (kart != null)
                 kart.SetControlsEnabled(false);
@@ -122,6 +122,26 @@ namespace ArcadeKart.Menu
             RiproduciSuonoIntro();
 
             StartCoroutine(SequenzaIntro());
+        }
+
+        // Usa il kart assegnato dall'Inspector; in assenza cerca il primo
+        // KartController attivo col tag Player. NON basta FindWithTag("Player"):
+        // in scena altri oggetti portano lo stesso tag (es. Collisioni_MURI,
+        // sfera) e il primo trovato non e' detto che sia il kart.
+        private void RisolviKart()
+        {
+            if (kart != null)
+                return;
+
+            KartController[] candidati = FindObjectsByType<KartController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            foreach (KartController candidato in candidati)
+            {
+                if (candidato != null && candidato.gameObject.CompareTag("Player"))
+                {
+                    kart = candidato;
+                    return;
+                }
+            }
         }
 
         // Crea il Canvas overlay (sopra ogni altra UI) con velo colorato e,
