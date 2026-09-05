@@ -20821,7 +20821,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.33758906, y: 1.2365772, z: 0.12710315}
+  - {x: -0.3365226, y: 1.2357925, z: 0.128295}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -20970,7 +20970,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.34697714, y: 1.2362295, z: -0.17727838}
+  - {x: -0.34297106, y: 1.2341009, z: -0.17490906}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -21119,7 +21119,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.4278525, y: 0.73765045, z: 0.0942744}
+  - {x: -0.44099954, y: 0.73839206, z: 0.10188954}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -21268,7 +21268,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.4248853, y: 0.73565304, z: -0.055220976}
+  - {x: -0.43942845, y: 0.73554057, z: -0.044615854}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -30904,8 +30904,12 @@ MonoBehaviour:
   targetCamera: {fileID: 1614856960}
   activateOnEnter:
   - {fileID: 1796633775}
+  - {fileID: 1349275452}
   deactivateOnEnter:
   - {fileID: 792623709}
+  activateOnExit: []
+  deactivateOnExit:
+  - {fileID: 1349275452}
 --- !u!65 &1847835832
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -31120,6 +31124,8 @@ MonoBehaviour:
   targetCamera: {fileID: 1614856960}
   activateOnEnter: []
   deactivateOnEnter: []
+  activateOnExit: []
+  deactivateOnExit: []
 --- !u!65 &1874502662
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -37577,6 +37583,8 @@ MonoBehaviour:
   targetCamera: {fileID: 1614856960}
   activateOnEnter: []
   deactivateOnEnter: []
+  activateOnExit: []
+  deactivateOnExit: []
 --- !u!65 &2079763478
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -38855,6 +38863,8 @@ MonoBehaviour:
   activateOnEnter:
   - {fileID: 792623709}
   deactivateOnEnter: []
+  activateOnExit: []
+  deactivateOnExit: []
 --- !u!65 &2144328952
 BoxCollider:
   m_ObjectHideFlags: 0

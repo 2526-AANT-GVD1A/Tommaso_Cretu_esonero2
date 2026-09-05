@@ -37,6 +37,13 @@ namespace ArcadeKart.Utility
         [SerializeField, Tooltip("Oggetti (es. elementi del Canvas) da disattivare quando questo trigger viene toccato.")]
         private GameObject[] deactivateOnEnter = System.Array.Empty<GameObject>();
 
+        [Header("Oggetti da attivare/disattivare all'uscita")]
+        [SerializeField, Tooltip("Oggetti (es. elementi del Canvas) da attivare quando il kart esce da questo trigger.")]
+        private GameObject[] activateOnExit = System.Array.Empty<GameObject>();
+
+        [SerializeField, Tooltip("Oggetti (es. elementi del Canvas) da disattivare quando il kart esce da questo trigger.")]
+        private GameObject[] deactivateOnExit = System.Array.Empty<GameObject>();
+
         private bool used;
 
         private void Reset()
@@ -90,8 +97,16 @@ namespace ArcadeKart.Utility
             if (!string.IsNullOrEmpty(requiredTag) && !other.CompareTag(requiredTag))
                 return;
 
-            if (string.IsNullOrEmpty(exitPhaseId))
+            ApplyExitToggleState();
+
+            // Phase Id vuoto: all'uscita il trigger lavora solo sugli oggetti,
+            // senza toccare la fase camera.
+            if (string.IsNullOrWhiteSpace(exitPhaseId))
+            {
+                if (oneShot)
+                    used = true;
                 return;
+            }
 
             if (targetCamera == null)
             {
@@ -99,9 +114,7 @@ namespace ArcadeKart.Utility
                 return;
             }
 
-            bool changed = targetCamera.SetPhase(exitPhaseId, exitTransitionMode);
-            if (!changed)
-                return;
+            targetCamera.SetPhase(exitPhaseId, exitTransitionMode);
 
             if (oneShot)
                 used = true;
@@ -119,6 +132,21 @@ namespace ArcadeKart.Utility
             {
                 if (deactivateOnEnter[i] != null)
                     deactivateOnEnter[i].SetActive(false);
+            }
+        }
+
+        private void ApplyExitToggleState()
+        {
+            for (int i = 0; i < activateOnExit.Length; i++)
+            {
+                if (activateOnExit[i] != null)
+                    activateOnExit[i].SetActive(true);
+            }
+
+            for (int i = 0; i < deactivateOnExit.Length; i++)
+            {
+                if (deactivateOnExit[i] != null)
+                    deactivateOnExit[i].SetActive(false);
             }
         }
     }
