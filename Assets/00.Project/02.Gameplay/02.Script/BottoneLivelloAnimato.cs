@@ -14,13 +14,14 @@ namespace ArcadeKart.Gameplay
         TornaAlMenu = 1
     }
 
-    // Abbellimento del bottone del menu: si ingrandisce leggermente quando il
-    // mouse passa sopra e, al click, saltella su e giu per un secondo prima di
-    // scivolare fuori dallo schermo verso destra; solo allora carica il livello
-    // e chiude il menu (le vecchie chiamate OnClick sono spostate qui per
-    // poterle ritardare dopo l'animazione). Quando un bottone viene premuto,
-    // tutti gli altri bottoni fratelli del menu diventano inselezionabili e lo
-    // seguono nell'uscita sincronizzata dallo schermo.
+    // Abbellimento del bottone del menu: si ingrandisce e si dondola
+    // (oscillazione sinistra/destra) quando il mouse passa sopra e, al click,
+    // saltella su e giu per un secondo prima di scivolare fuori dallo schermo
+    // verso destra; solo allora carica il livello e chiude il menu (le vecchie
+    // chiamate OnClick sono spostate qui per poterle ritardare dopo
+    // l'animazione). Quando un bottone viene premuto, tutti gli altri bottoni
+    // fratelli del menu diventano inselezionabili e lo seguono nell'uscita
+    // sincronizzata dallo schermo.
     public class BottoneLivelloAnimato : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         [Header("Riferimenti")]
@@ -43,6 +44,13 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Velocita' dell'ingrandimento/riduzione.")]
         private float velocitaScala = 12f;
 
+        [Header("Dondolio al passaggio del mouse")]
+        [SerializeField, Tooltip("Ampiezza massima del dondolio sinistra/destra (in gradi).")]
+        private float ampiezzaDondolio = 5f;
+
+        [SerializeField, Tooltip("Oscillazioni complete del dondolio al secondo.")]
+        private float oscillazioniDondolio = 2.5f;
+
         [Header("Animazione al click")]
         [SerializeField, Tooltip("Durata del saltello su e giu (in secondi).")]
         private float durataSaltello = 1f;
@@ -64,12 +72,20 @@ namespace ArcadeKart.Gameplay
         private bool mouseSopra;
         private bool inAnimazione;
         private Vector2 posizioneBase;
+        private Quaternion rotazioneBase;
+
+        // Stato del dondolio: tempo di hover accumulato (la fase dell'onda,
+        // mantenuta se il mouse esce e rientra) e peso 0..1 che fa entrare e
+        // uscire l'oscillazione in dolcezza, senza scatti.
+        private float tempoDondolio;
+        private float pesoDondolio;
 
         private void Awake()
         {
             bottone = GetComponent<Button>();
             rectTransform = (RectTransform)transform;
             posizioneBase = rectTransform.anchoredPosition;
+            rotazioneBase = rectTransform.localRotation;
         }
 
         private void OnEnable()
@@ -80,10 +96,13 @@ namespace ArcadeKart.Gameplay
             // del menu sovrapponendosi agli altri.
             inAnimazione = false;
             mouseSopra = false;
+            tempoDondolio = 0f;
+            pesoDondolio = 0f;
             if (rectTransform != null)
             {
                 rectTransform.anchoredPosition = posizioneBase;
                 rectTransform.localScale = Vector3.one;
+                rectTransform.localRotation = rotazioneBase;
             }
             if (bottone != null)
                 bottone.interactable = true;
@@ -97,6 +116,33 @@ namespace ArcadeKart.Gameplay
             float scalaTarget = mouseSopra ? scalaHover : 1f;
             float scala = Mathf.Lerp(rectTransform.localScale.x, scalaTarget, Time.deltaTime * velocitaScala);
             rectTransform.localScale = new Vector3(scala, scala, 1f);
+
+            AggiornaDondolio();
+        }
+
+        // Oscillazione sinistra/destra attorno alla rotazione di base mentre
+        // il mouse e' sopra il bottone: un'onda sinusoidale il cui peso sale
+        // e scende in dolcezza, cosi' il dondolio parte, si ferma e riparte
+        // senza scatti. A peso zero la rotazione torna esattamente a quella
+        // di partenza catturata in Awake.
+        private void AggiornaDondolio()
+        {
+            if (mouseSopra)
+                tempoDondolio += Time.deltaTime;
+
+            float pesoTarget = mouseSopra ? 1f : 0f;
+            float velocitaPeso = mouseSopra ? velocitaScala : velocitaScala * 0.5f;
+            pesoDondolio = Mathf.MoveTowards(pesoDondolio, pesoTarget, Time.deltaTime * velocitaPeso);
+
+            if (pesoDondolio <= 0f)
+            {
+                rectTransform.localRotation = rotazioneBase;
+                tempoDondolio = 0f;
+                return;
+            }
+
+            float angolo = Mathf.Sin(tempoDondolio * oscillazioniDondolio * Mathf.PI * 2f) * ampiezzaDondolio;
+            rectTransform.localRotation = rotazioneBase * Quaternion.Euler(0f, 0f, angolo * pesoDondolio);
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -118,6 +164,7 @@ namespace ArcadeKart.Gameplay
             inAnimazione = true;
             bottone.interactable = false;
             rectTransform.localScale = Vector3.one;
+            rectTransform.localRotation = rotazioneBase;
 
             // Gli altri bottoni del menu diventano inselezionabili e, senza
             // saltellare, seguiranno questo nell'uscita sincronizzata dallo
@@ -154,6 +201,7 @@ namespace ArcadeKart.Gameplay
             {
                 rectTransform.anchoredPosition = posizioneBase;
                 rectTransform.localScale = Vector3.one;
+                rectTransform.localRotation = rotazioneBase;
             }
         }
 
