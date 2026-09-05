@@ -12,6 +12,8 @@ namespace ArcadeKart.Gameplay
     /// In volo o sulle pareti-rampa (lancio skate) il suono si spegne; al
     /// ritorno a terra un one-shot di atterraggio suona mentre le ruote
     /// ripartono immediatamente (sorgenti separate, nessuna attesa).
+    /// Un urto forte contro un muro/parete (OnImpattoMuro del controller)
+    /// riproduce un one-shot di urto a volume proporzionale alla forza.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class AudioRuoteKart : MonoBehaviour
@@ -78,6 +80,33 @@ namespace ArcadeKart.Gameplay
         [Tooltip("Tempo minimo di volo (sec) per riprodurre l'atterraggio: filtra i micro-stacchi di terreno e lo spawn (0 = sempre).")]
         [SerializeField] private float tempoVoloMinimo = 0.1f;
 
+        [Header("Urto col muro")]
+        [Tooltip("Suono one-shot riprodotto quando il kart sbatte forte contro un muro/parete (fdf03fcd.s134). L'evento arriva da KartController (OnImpattoMuro), gia' filtrato dal suo impactThreshold.")]
+        [SerializeField] private AudioClip suonoUrto;
+
+        [Tooltip("AudioSource per il suono di urto; se vuoto viene creato in automatico su questo GameObject.")]
+        [SerializeField] private AudioSource sorgenteUrto;
+
+        [Tooltip("Soglia aggiuntiva di forza (m/s) oltre quella del controller (impactThreshold): sotto, il suono non parte. 0 = usa solo la soglia del controller.")]
+        [SerializeField] private float sogliaUrtoAggiuntiva = 0f;
+
+        [Tooltip("Volume dell'urto appena sopra soglia.")]
+        [Range(0f, 2f)]
+        [SerializeField] private float volumeUrtoMinimo = 0.6f;
+
+        [Tooltip("Volume dell'urto alla forza di riferimento (forzaVolumeMassimo): oltre, resta al massimo.")]
+        [Range(0f, 2f)]
+        [SerializeField] private float volumeUrtoMassimo = 1.2f;
+
+        [Tooltip("Forza (m/s) a cui il volume urto raggiunge volumeUrtoMassimo.")]
+        [SerializeField] private float forzaVolumeMassimo = 10f;
+
+        [Tooltip("Pitch del suono di urto (1 = velocita' di riproduzione normale).")]
+        [SerializeField] private float pitchUrto = 1f;
+
+        [Tooltip("Tempo minimo (sec) fra due suoni di urto: evita ri-trigger sfregando lungo una curva del muro.")]
+        [SerializeField] private float cooldownUrto = 0.25f;
+
         // Volume corrente smorzato: governa il fade a zero quando il kart e'
         // fermo (niente tagli netti = niente click in coda al suono).
         private float volumeAttuale;
@@ -86,6 +115,9 @@ namespace ArcadeKart.Gameplay
         // precedente, per il rilevamento della transizione volo/parete -> terra.
         private float tempoInAria;
         private bool eraATerra = true;
+
+        // Timestamp dell'ultimo suono di urto, per il cooldown anti ri-trigger.
+        private float ultimoTempoUrto = -999f;
 
         private void Awake()
         {
@@ -121,8 +153,53 @@ namespace ArcadeKart.Gameplay
             sorgenteAtterraggio.spatialBlend = 1f;
             sorgenteAtterraggio.dopplerLevel = 0f;
 
+            // Sorgente dedicata all'urto col muro (one-shot separato).
+            if (sorgenteUrto == null)
+                sorgenteUrto = gameObject.AddComponent<AudioSource>();
+
+            if (suonoUrto != null)
+                sorgenteUrto.clip = suonoUrto;
+
+            sorgenteUrto.loop = false;
+            sorgenteUrto.playOnAwake = false;
+            sorgenteUrto.spatialBlend = 1f;
+            sorgenteUrto.dopplerLevel = 0f;
+
             eraATerra = true;
             tempoInAria = 0f;
+        }
+
+        private void OnEnable()
+        {
+            if (kart != null)
+                kart.OnImpattoMuro.AddListener(GestisciImpattoMuro);
+        }
+
+        private void OnDisable()
+        {
+            if (kart != null)
+                kart.OnImpattoMuro.RemoveListener(GestisciImpattoMuro);
+        }
+
+        // Da KartController.OnImpattoMuro: forza (m/s) dell'urto contro una
+        // superficie verticale. Volume proporzionale alla forza, con cooldown
+        // anti ri-trigger (sfregamenti lungo curve del muro).
+        private void GestisciImpattoMuro(float forza)
+        {
+            if (sorgenteUrto == null || suonoUrto == null)
+                return;
+            if (forza < sogliaUrtoAggiuntiva)
+                return;
+            if (Time.time - ultimoTempoUrto < cooldownUrto)
+                return;
+
+            ultimoTempoUrto = Time.time;
+            float rapporto = Mathf.Clamp01(
+                (forza - sogliaUrtoAggiuntiva)
+                / Mathf.Max(forzaVolumeMassimo - sogliaUrtoAggiuntiva, 0.001f));
+            sorgenteUrto.pitch = pitchUrto;
+            sorgenteUrto.volume = Mathf.Lerp(volumeUrtoMinimo, volumeUrtoMassimo, rapporto);
+            sorgenteUrto.PlayOneShot(suonoUrto);
         }
 
         private void Update()

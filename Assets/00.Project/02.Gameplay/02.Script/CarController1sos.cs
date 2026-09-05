@@ -359,6 +359,10 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' minima di urto per invocare OnImpact.")]
         private float impactThreshold = 5f;
 
+        [SerializeField, Tooltip("Soglia sulla normale di contatto per classificare un urto come 'contro un muro': normale con |y| sotto questo valore = superficie verticale (muro o parete-rampa). 0.3 = circa 72 gradi o piu'.")]
+        [Range(0f, 1f)]
+        private float sogliaNormaleMuro = 0.3f;
+
         [Header("AI / Sterzata costante")]
         [SerializeField, Tooltip("Modalita' per kart pilotati dalla CPU (NPC). Bypassa lo snap di inversione (instantRealignAngle), il gating 'ruota-prima-di-muoverti' (isReorientingFromStop) e la frenata/limitazione di reorientation in corsa (isReorientingWhileMoving), e usa sempre il turnRate pieno a qualsiasi velocita': il kart sterza COSTANTEMENTE verso la direzione desiderata e accelera sempre verso il target, senza scatti ne' blocchi. Lasciarlo false sul kart del giocatore. EnemyKart lo attiva in Awake.")]
         private bool aiSteeringMode = false;
@@ -370,6 +374,12 @@ namespace ArcadeKart.Core
         public UnityEvent<bool> OnGroundedChanged;
         public UnityEvent<float> OnSpeedChanged;
         public UnityEvent<float> OnImpact;
+
+        // Invocato quando un urto sopra impactThreshold colpisce una
+        // superficie verticale (muro/parete-rampa): la normale di contatto
+        // e' orizzontale (|y| < sogliaNormaleMuro). Separato da OnImpact,
+        // che scatta su qualsiasi urto forte (anche atterraggi duri).
+        public UnityEvent<float> OnImpattoMuro;
 
         #endregion
 
@@ -719,8 +729,25 @@ namespace ArcadeKart.Core
         private void OnCollisionEnter(Collision collision)
         {
             float v = collision.relativeVelocity.magnitude;
-            if (v >= impactThreshold)
-                OnImpact?.Invoke(v);
+            if (v < impactThreshold)
+                return;
+
+            // Classificazione "muro": almeno un contatto con normale quasi
+            // orizzontale (superficie verticale). Muri veri e pareti skate
+            // matchano; atterraggi duri su terreno no (normali verso l'alto).
+            bool controMuro = false;
+            for (int i = 0; i < collision.contactCount; i++)
+            {
+                if (Mathf.Abs(collision.GetContact(i).normal.y) < sogliaNormaleMuro)
+                {
+                    controMuro = true;
+                    break;
+                }
+            }
+
+            OnImpact?.Invoke(v);
+            if (controMuro)
+                OnImpattoMuro?.Invoke(v);
         }
 
         private void OnCollisionStay(Collision collision)
