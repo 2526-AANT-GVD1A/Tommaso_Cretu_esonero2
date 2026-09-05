@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using ArcadeKart.Core;
@@ -7,8 +6,9 @@ using ArcadeKart.Core;
 namespace ArcadeKart.Menu
 {
     // Intro di avvio: al primo avvio dell'applicazione copre lo schermo con un
-    // velo (nero di default) e lo fa dissolvere rivelando la scena, poi
-    // attiva il menu. E' unica per avvio: un flag statico (che si azzera da
+    // velo (nero di default) e lo fa dissolvere rivelando la scena; il menu si
+    // attiva all'inizio della dissolvenza, cosi' il velo lo rivela
+    // progressivamente. E' unica per avvio: un flag statico (che si azzera da
     // solo al riavvio dell'app) impedisce che si ripresenti nella stessa
     // sessione, quindi il ritorno al menu (Esc, fine livello o bottone) NON
     // riproduce mai l'intro: LevelManager.TornaAlMenu continua a fare
@@ -16,11 +16,15 @@ namespace ArcadeKart.Menu
     //
     // Estendibile dall'Inspector senza toccare il codice:
     // - logoSprite: appare centrata sul velo e svanisce insieme a esso;
-    // - suonoIntro: parte col velo coprente, su un oggetto separato dall'
-    //   overlay, cosi' puo' durare anche piu' della intro stessa;
-    // - audioSottoConFadeOut: se attivo, i suoni di scena/menu presenti
-    //   all'avvio vengono silenziati sotto la intro e rientrano in
-    //   dissolvenza insieme al velo; se disattivo si sentono da subito.
+    // - suonoIntro: parte con il velo coprente, su un oggetto separato
+    //   dall'overlay, cosi' puo' durare anche piu' della intro stessa;
+    // - audioSottoConFadeOut: se attivo, il volume GLOBALE dell'applicazione
+    //   (AudioListener.volume) viene portato a 0 e rientra durante la
+    //   dissolvenza. Un solo comando per TUTTO l'audio: copre qualsiasi
+    //   sorgente, anche quelle create a runtime (musica BG di TriggerAudio,
+    //   SFX di PlayClipAtPoint) o riscritte ogni frame, senza doverle
+    //   elencare. Il jingle della intro passa anch'esso dal listener, quindi
+    //   rientra insieme a tutto il resto.
     public class IntroAvvio : MonoBehaviour
     {
         // Vero dopo la prima intro della sessione: campo statico, si azzera
@@ -51,7 +55,7 @@ namespace ArcadeKart.Menu
         [SerializeField, Tooltip("Colore del velo a schermo pieno.")]
         private Color coloreSfondo = Color.black;
 
-        [SerializeField, Tooltip("Suono della intro (es. jingle). Parte con il velo gia' coprente.")]
+        [SerializeField, Tooltip("Suono della intro (es. jingle). Parte col velo coprente ma il volume globale e' a 0: rientra durante la dissolvenza, insieme a tutto il resto.")]
         private AudioClip suonoIntro;
 
         [SerializeField, Tooltip("Volume del suono della intro.")]
@@ -65,7 +69,7 @@ namespace ArcadeKart.Menu
         private float durataDissolvenza = 2f;
 
         [Header("Audio di scena")]
-        [SerializeField, Tooltip("Se attivo, i suoni di scena/menu presenti all'avvio sono silenziati sotto la intro e rientrano in dissolvenza insieme al velo. Se disattivo, si sentono da subito sotto la intro.")]
+        [SerializeField, Tooltip("Se attivo, il volume globale dell'applicazione (AudioListener) e' a 0 durante il velo pieno e rientra gradualmente al 100% durante la dissolvenza: copre ogni suono della scena senza configurare nulla. Se disattivo, l'audio si sente da subito sotto la intro.")]
         private bool audioSottoConFadeOut = true;
 
         // Overlay creato a runtime: Canvas sopra ogni altra UI, con velo e
@@ -73,10 +77,10 @@ namespace ArcadeKart.Menu
         private GameObject overlay;
         private CanvasGroup gruppoOverlay;
 
-        // Sorgenti di scena silenziate durante l'intro e i loro volumi
-        // originali (parallel Index: stessa lunghezza e stesso ordine).
-        private readonly List<AudioSource> sorgentiSilenziate = new List<AudioSource>();
-        private readonly List<float> volumiOriginali = new List<float>();
+        // Volume globale (AudioListener): salvato all'avvio e ripristinato
+        // esattamente a fine intro. Un solo knob per l'intera scena.
+        private float volumeGlobaleOriginale = 1f;
+        private bool hoAbbassatoVolumeGlobale;
 
         private AudioSource sorgenteSuonoIntro;
 
@@ -89,6 +93,18 @@ namespace ArcadeKart.Menu
                 return;
 
             CostruisciOverlay();
+
+            // Un solo comando mette a silenzio QUALSIASI suono presente e
+            // futuro (sorgenti persistenti, create a runtime, reverb compresa):
+            // sotto il velo pieno non si deve sentire nulla. Rientra durante
+            // la dissolvenza, sincronizzato con l'alpha del velo.
+            if (audioSottoConFadeOut)
+            {
+                volumeGlobaleOriginale = AudioListener.volume;
+                AudioListener.volume = 0f;
+                hoAbbassatoVolumeGlobale = true;
+                Debug.Log("[IntroAvvio] Volume globale (AudioListener) a 0: tutto l'audio rientra durante la dissolvenza.", this);
+            }
 
             // Menu nascosto prima del primo frame: nessun flash a schermo.
             if (oggettoMenu != null)
@@ -103,7 +119,7 @@ namespace ArcadeKart.Menu
                 return;
 
             // Il kart non deve rispondere durante la intro (il menu e' spento,
-            // quindi MenuControls non puo' farlo). A fine intro e' il
+            // quindi MenuControls non puo' farlo). A inizio dissolvenza e' il
             // MenuControls.OnEnable del menu che si attiva a ricongelarlo e
             // liberare il cursore: identico a LevelManager.TornaAlMenu.
             RisolviKart();
@@ -116,12 +132,21 @@ namespace ArcadeKart.Menu
             Cursor.visible = true;
             Cursor.lockState = CursorLockMode.None;
 
-            if (audioSottoConFadeOut)
-                SilenziaAudioDiScena();
-
             RiproduciSuonoIntro();
 
             StartCoroutine(SequenzaIntro());
+        }
+
+        // Safety: se l'oggetto viene distrutto prima di aver completato
+        // l'intro (stop Play in editor, reload di scena), il volume globale
+        // non deve restare a 0.
+        private void OnDestroy()
+        {
+            if (hoAbbassatoVolumeGlobale)
+            {
+                AudioListener.volume = volumeGlobaleOriginale;
+                hoAbbassatoVolumeGlobale = false;
+            }
         }
 
         // Usa il kart assegnato dall'Inspector; in assenza cerca il primo
@@ -198,48 +223,10 @@ namespace ArcadeKart.Menu
             return immagine;
         }
 
-        // Salva e azzera il volume di ogni AudioSource attiva in scena (suoni
-        // di menu/scena). Le sorgenti nate dopo (es. SFX dei trigger) non
-        // esistono ancora: nasceranno col loro volume e non vanno toccate.
-        private void SilenziaAudioDiScena()
-        {
-            AudioSource[] tutte = FindObjectsByType<AudioSource>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            foreach (AudioSource sorgente in tutte)
-            {
-                if (sorgente == null || sorgente == sorgenteSuonoIntro)
-                    continue;
-
-                sorgentiSilenziate.Add(sorgente);
-                volumiOriginali.Add(sorgente.volume);
-                sorgente.volume = 0f;
-            }
-        }
-
-        // Rientro dei suoni di scena, sincronizzato con la dissolvenza del
-        // velo (fattore 0 = muto, 1 = volume originale). A fattore 1 i volumi
-        // esatti di partenza sono ripristinati e le sorgenti non vengono piu'
-        // toccate.
-        private void RipristinaAudio(float fattore)
-        {
-            for (int i = 0; i < sorgentiSilenziate.Count; i++)
-            {
-                AudioSource sorgente = sorgentiSilenziate[i];
-                if (sorgente == null)
-                    continue;
-
-                sorgente.volume = volumiOriginali[i] * fattore;
-            }
-
-            if (fattore >= 1f)
-            {
-                sorgentiSilenziate.Clear();
-                volumiOriginali.Clear();
-            }
-        }
-
         // Il suono della intro vive su un oggetto figlio del gestore (non
         // dell'overlay): se il clip dura piu' della intro continua a suonare
-        // finche' non finisce, poi si autodistrugge.
+        // finche' non finisce, poi si autodistrugge. Passa dal volume globale:
+        // nel velo pieno e' muto e rientra durante la dissolvenza.
         private void RiproduciSuonoIntro()
         {
             if (suonoIntro == null)
@@ -267,14 +254,23 @@ namespace ArcadeKart.Menu
                 Destroy(oggetto);
         }
 
-        // 1) velo pieno per durataNero; 2) dissolvenza del velo (e del logo)
-        // con eventuale rientro sincronizzato dei suoni di scena; 3)
-        // attivazione del menu e chiusura dell'intro.
+        // 1) velo pieno per durataNero (volume globale a 0); 2) attivazione
+        // del menu + dissolvenza del velo (e del logo) con rientro globale
+        // dell'audio sincronizzato all'alpha; 3) chiusura dell'intro.
         private IEnumerator SequenzaIntro()
         {
             float nero = Mathf.Max(0f, durataNero);
             if (nero > 0f)
                 yield return new WaitForSecondsRealtime(nero);
+
+            // Il menu si attiva A INIZIO dissolvenza: il velo ancora coprente
+            // lo rivela progressivamente e la sua musica (se sotto oggettoMenu,
+            // spenta finche' il menu e' inattivo) parte subito, ma il volume
+            // globale e' ancora a 0: rientra insieme a tutto il resto senza
+            // scatti. MenuControls.OnEnable ricongela il kart e libera il
+            // cursore, come gia' avviene al ritorno al menu.
+            if (oggettoMenu != null)
+                oggettoMenu.SetActive(true);
 
             float dissolvenza = Mathf.Max(0f, durataDissolvenza);
             float tempo = 0f;
@@ -286,19 +282,19 @@ namespace ArcadeKart.Menu
 
                 gruppoOverlay.alpha = 1f - easing;
                 if (audioSottoConFadeOut)
-                    RipristinaAudio(easing);
+                    AudioListener.volume = volumeGlobaleOriginale * easing;
 
                 yield return null;
             }
 
             gruppoOverlay.alpha = 0f;
             if (audioSottoConFadeOut)
-                RipristinaAudio(1f);
-
-            // Il menu si attiva: MenuControls.OnEnable ricongela il kart e
-            // libera il cursore, come gia' avviene al ritorno al menu.
-            if (oggettoMenu != null)
-                oggettoMenu.SetActive(true);
+            {
+                // Ripristino esatto del volume di partenza: la intro non tocca
+                // piu' nulla da qui in avanti.
+                AudioListener.volume = volumeGlobaleOriginale;
+                hoAbbassatoVolumeGlobale = false;
+            }
 
             introGiaRiprodotta = true;
 
