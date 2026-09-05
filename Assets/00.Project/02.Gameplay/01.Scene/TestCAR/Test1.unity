@@ -12008,6 +12008,9 @@ MonoBehaviour:
   velocitaScala: 12
   ampiezzaDondolio: 5
   oscillazioniDondolio: 2.5
+  suonoHover: {fileID: 8300000, guid: f92e4278e2d268a26b3ac3f262dcabb1, type: 3}
+  suonoClick: {fileID: 8300000, guid: d5b61bbd2c468cdefbd25067ee9bbe61, type: 3}
+  volumeSuoni: 1
   durataSaltello: 1
   ampiezzaSaltello: 22
   numeroSaltelli: 3
@@ -19936,6 +19939,9 @@ MonoBehaviour:
   velocitaScala: 12
   ampiezzaDondolio: 5
   oscillazioniDondolio: 2.5
+  suonoHover: {fileID: 8300000, guid: f92e4278e2d268a26b3ac3f262dcabb1, type: 3}
+  suonoClick: {fileID: 8300000, guid: d5b61bbd2c468cdefbd25067ee9bbe61, type: 3}
+  volumeSuoni: 1
   durataSaltello: 1
   ampiezzaSaltello: 22
   numeroSaltelli: 3
@@ -37901,6 +37907,9 @@ MonoBehaviour:
   velocitaScala: 12
   ampiezzaDondolio: 5
   oscillazioniDondolio: 2.5
+  suonoHover: {fileID: 8300000, guid: f92e4278e2d268a26b3ac3f262dcabb1, type: 3}
+  suonoClick: {fileID: 8300000, guid: d5b61bbd2c468cdefbd25067ee9bbe61, type: 3}
+  volumeSuoni: 1
   durataSaltello: 1
   ampiezzaSaltello: 22
   numeroSaltelli: 3

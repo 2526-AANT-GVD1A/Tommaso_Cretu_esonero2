@@ -51,6 +51,16 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Oscillazioni complete del dondolio al secondo.")]
         private float oscillazioniDondolio = 2.5f;
 
+        [Header("Suoni del bottone")]
+        [SerializeField, Tooltip("Suono riprodotto quando il mouse entra nel bottone. Vuoto = nessun suono.")]
+        private AudioClip suonoHover;
+
+        [SerializeField, Tooltip("Suono riprodotto quando il bottone viene premuto (parte insieme all'animazione del click). Vuoto = nessun suono.")]
+        private AudioClip suonoClick;
+
+        [SerializeField, Tooltip("Volume dei suoni di hover e click."), Range(0f, 1f)]
+        private float volumeSuoni = 1f;
+
         [Header("Animazione al click")]
         [SerializeField, Tooltip("Durata del saltello su e giu (in secondi).")]
         private float durataSaltello = 1f;
@@ -80,6 +90,12 @@ namespace ArcadeKart.Gameplay
         // riportato a scala 1 all'avvio.
         private Vector3 scalaBase;
 
+        // Sorgente unica dei suoni di hover e click, creata sull'oggetto del
+        // bottone in Awake (2D, non spazializzata). Riproducendo sempre qui
+        // un rientro rapido del mouse riparte da capo e il click sostituisce
+        // l'eventuale hover ancora in corso, senza sovrapposizioni.
+        private AudioSource sorgenteSuoni;
+
         // Stato del dondolio: tempo di hover accumulato (la fase dell'onda,
         // mantenuta se il mouse esce e rientra) e peso 0..1 che fa entrare e
         // uscire l'oscillazione in dolcezza, senza scatti.
@@ -93,6 +109,11 @@ namespace ArcadeKart.Gameplay
             posizioneBase = rectTransform.anchoredPosition;
             rotazioneBase = rectTransform.localRotation;
             scalaBase = rectTransform.localScale;
+
+            sorgenteSuoni = gameObject.AddComponent<AudioSource>();
+            sorgenteSuoni.playOnAwake = false;
+            sorgenteSuoni.spatialBlend = 0f;
+            sorgenteSuoni.dopplerLevel = 0f;
         }
 
         private void OnEnable()
@@ -160,11 +181,25 @@ namespace ArcadeKart.Gameplay
         public void OnPointerEnter(PointerEventData eventData)
         {
             mouseSopra = true;
+            RiproduciSuono(suonoHover);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             mouseSopra = false;
+        }
+
+        // Riproduce il clip indicato sulla sorgente unica del bottone.
+        // Play riparte sempre dall'inizio: suoni brevi e ravvicinati non si
+        // accumulano mai uno sopra l'altro.
+        private void RiproduciSuono(AudioClip clip)
+        {
+            if (clip == null || sorgenteSuoni == null)
+                return;
+
+            sorgenteSuoni.volume = Mathf.Clamp01(volumeSuoni);
+            sorgenteSuoni.clip = clip;
+            sorgenteSuoni.Play();
         }
 
         // Chiamato dall'OnClick del Button: prima l'animazione, poi il lavoro vero.
@@ -177,6 +212,8 @@ namespace ArcadeKart.Gameplay
             bottone.interactable = false;
             rectTransform.localScale = scalaBase;
             rectTransform.localRotation = rotazioneBase;
+
+            RiproduciSuono(suonoClick);
 
             // Gli altri bottoni del menu diventano inselezionabili e, senza
             // saltellare, seguiranno questo nell'uscita sincronizzata dallo
