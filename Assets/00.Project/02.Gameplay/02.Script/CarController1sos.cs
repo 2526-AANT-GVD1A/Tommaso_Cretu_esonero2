@@ -390,6 +390,12 @@ namespace ArcadeKart.Core
         // inversioni/ralenti), oltre alla sola fase camminata/corsa.
         public float SoffittoVelocitaAttuale => currentPlanarMax;
 
+        // True in tutta la fase lancio skate (contatto con parete verticale
+        // + volo balistico fino all'atterraggio). Esposto per l'audio: durante
+        // la parete IsGrounded resta vero (lo SphereCast becca la rampa sotto)
+        // ma le ruote non toccano terra "camminabile".
+        public bool LancioSkateAttivo => skateRampLaunch;
+
         // Modalita' AI: vedi tooltip di aiSteeringMode. Letta/scritta dal NPC
         // (EnemyKart) in Awake per attivare la sterzata costante. Pubblica
         // perche' deve essere leggibile anche da fuori (es. debug).

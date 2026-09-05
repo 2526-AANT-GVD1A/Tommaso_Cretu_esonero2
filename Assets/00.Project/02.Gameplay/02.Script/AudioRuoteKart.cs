@@ -9,6 +9,9 @@ namespace ArcadeKart.Gameplay
     /// CAMMINATA (boost rilasciato) = pitch e volume ridotti;
     /// CORSA (boost mouse sx tenuto) = pitch e volume pieni.
     /// A kart fermo il suono sfuma e va in pausa.
+    /// In volo o sulle pareti-rampa (lancio skate) il suono si spegne; al
+    /// ritorno a terra un one-shot di atterraggio suona mentre le ruote
+    /// ripartono immediatamente (sorgenti separate, nessuna attesa).
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class AudioRuoteKart : MonoBehaviour
@@ -58,9 +61,31 @@ namespace ArcadeKart.Gameplay
         [Range(0f, 1f)]
         [SerializeField] private float volumeAVelocitaZero = 0.5f;
 
+        [Header("Atterraggio")]
+        [Tooltip("Suono one-shot riprodotto al ritorno a terra dopo un volo o una parete-rampa (fdf03fcd.s133).")]
+        [SerializeField] private AudioClip suonoAtterraggio;
+
+        [Tooltip("AudioSource per il suono di atterraggio; se vuoto viene creato in automatico su questo GameObject.")]
+        [SerializeField] private AudioSource sorgenteAtterraggio;
+
+        [Tooltip("Volume del suono di atterraggio: sopra 1 = leggermente piu' forte del suono ruote.")]
+        [Range(0f, 2f)]
+        [SerializeField] private float volumeAtterraggio = 1.15f;
+
+        [Tooltip("Pitch del suono di atterraggio (1 = velocita' di riproduzione normale).")]
+        [SerializeField] private float pitchAtterraggio = 1f;
+
+        [Tooltip("Tempo minimo di volo (sec) per riprodurre l'atterraggio: filtra i micro-stacchi di terreno e lo spawn (0 = sempre).")]
+        [SerializeField] private float tempoVoloMinimo = 0.1f;
+
         // Volume corrente smorzato: governa il fade a zero quando il kart e'
         // fermo (niente tagli netti = niente click in coda al suono).
         private float volumeAttuale;
+
+        // Stato atterraggio: tempo cumulato senza terra e flag del frame
+        // precedente, per il rilevamento della transizione volo/parete -> terra.
+        private float tempoInAria;
+        private bool eraATerra = true;
 
         private void Awake()
         {
@@ -81,6 +106,23 @@ namespace ArcadeKart.Gameplay
 
             volumeAttuale = 0f;
             sorgenteAudio.volume = 0f;
+
+            // Sorgente dedicata all'atterraggio (one-shot separato dal loop:
+            // le due riproduzioni non si escludono a vicenda).
+            if (sorgenteAtterraggio == null)
+                sorgenteAtterraggio = gameObject.AddComponent<AudioSource>();
+
+            if (suonoAtterraggio != null)
+                sorgenteAtterraggio.clip = suonoAtterraggio;
+
+            sorgenteAtterraggio.loop = false;
+            sorgenteAtterraggio.playOnAwake = false;
+            // Stessa cura spaziale delle ruote: fonte 3D agganciata al kart.
+            sorgenteAtterraggio.spatialBlend = 1f;
+            sorgenteAtterraggio.dopplerLevel = 0f;
+
+            eraATerra = true;
+            tempoInAria = 0f;
         }
 
         private void Update()
@@ -111,8 +153,34 @@ namespace ArcadeKart.Gameplay
                 volumeTarget *= Mathf.Lerp(volumeAVelocitaZero, 1f, rapporto);
             }
 
+            // A terra "camminabile": esclude il volo E le pareti-rampa. Nel
+            // lancio skate IsGrounded resta vero (lo SphereCast becca la
+            // rampa sotto la parete), quindi serve anche LancioSkateAttivo.
+            bool kartATerra = kart.IsGrounded && !kart.LancioSkateAttivo;
+
+            // Transizione volo/parete -> terra: one-shot di atterraggio. Le
+            // ruote ripartono IMMEDIATAMENTE: l'one-shot suona sopra il loop
+            // che rientra col fade esistente, su sorgente separata.
+            if (kartATerra)
+            {
+                if (!eraATerra && tempoInAria >= tempoVoloMinimo
+                    && sorgenteAtterraggio != null && suonoAtterraggio != null)
+                {
+                    sorgenteAtterraggio.pitch = pitchAtterraggio;
+                    sorgenteAtterraggio.volume = volumeAtterraggio;
+                    sorgenteAtterraggio.PlayOneShot(suonoAtterraggio);
+                }
+                tempoInAria = 0f;
+            }
+            else
+            {
+                tempoInAria += Time.deltaTime;
+            }
+            eraATerra = kartATerra;
+
             bool inMovimento = velocitaAssoluta >= sogliaMovimento;
-            if (!inMovimento)
+            bool suonoRuoteAttivo = kartATerra && inMovimento;
+            if (!suonoRuoteAttivo)
                 volumeTarget = 0f;
 
             // Smorzamento esponenziale (stesso schema del soffitto nel controller).
@@ -121,7 +189,7 @@ namespace ArcadeKart.Gameplay
             sorgenteAudio.pitch = Mathf.Lerp(sorgenteAudio.pitch, pitchTarget, passo);
             sorgenteAudio.volume = volumeAttuale;
 
-            if (inMovimento)
+            if (suonoRuoteAttivo)
             {
                 if (!sorgenteAudio.isPlaying)
                     sorgenteAudio.Play();
