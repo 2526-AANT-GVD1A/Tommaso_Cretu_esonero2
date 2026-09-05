@@ -11402,6 +11402,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1001 &336304190
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -17285,6 +17287,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1 &555650008
 GameObject:
   m_ObjectHideFlags: 0
@@ -18855,6 +18859,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1001 &791919919
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -25292,6 +25298,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1001 &1371322428
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -26615,6 +26623,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1 &1491910889
 GameObject:
   m_ObjectHideFlags: 0
@@ -26937,6 +26947,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1 &1524983092
 GameObject:
   m_ObjectHideFlags: 0
@@ -36812,6 +36824,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1 &2079763475
 GameObject:
   m_ObjectHideFlags: 0
@@ -38265,6 +38279,8 @@ MonoBehaviour:
   spinDegreesPerSecond: {x: 360, y: 360, z: 360}
   shrinkOnFly: 1
   endScaleMultiplier: 0.75
+  suonoRaccolta: {fileID: 8300000, guid: ad97f1613d659c5ea9a27fa36aee3bc0, type: 3}
+  volumeRaccolta: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

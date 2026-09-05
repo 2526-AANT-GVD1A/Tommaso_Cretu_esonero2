@@ -29,6 +29,13 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Scala finale relativa durante il volo.")]
         private float endScaleMultiplier = 0.75f;
 
+        [Header("Suono")]
+        [SerializeField, Tooltip("Suono riprodotto al momento della raccolta (al tocco).")]
+        private AudioClip suonoRaccolta;
+
+        [SerializeField, Tooltip("Volume del suono di raccolta.")]
+        private float volumeRaccolta = 1f;
+
         private bool collected;
         private Collider cachedCollider;
         private Rigidbody cachedRb;
@@ -124,6 +131,12 @@ namespace ArcadeKart.Gameplay
         private IEnumerator FlyToStackRoutine(KartCollectedStack stack)
         {
             collected = true;
+
+            // Suono di raccolta al tocco: PlayClipAtPoint crea un AudioSource
+            // temporaneo indipendente dal pickup, cosi' il suono non viene
+            // troncato quando l'oggetto si disattiva a fine volo (SetActive(false)).
+            if (suonoRaccolta != null)
+                AudioSource.PlayClipAtPoint(suonoRaccolta, transform.position, volumeRaccolta);
 
             if (cachedCollider != null)
                 cachedCollider.enabled = false;
