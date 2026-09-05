@@ -18350,21 +18350,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6412b4aca046a92789dc440ab2be8237, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxSpeed: 10
-  cruiseSpeed: 12
+  maxSpeed: 3
+  cruiseSpeed: 3
   boostReleaseDeceleration: 8
   driftBoostEndDecay: 6
-  acceleration: 10
-  deceleration: 10
+  acceleration: 1
+  deceleration: 1
   reverseSpeed: 0
   brakeStrength: 18
-  turnRate: 400
+  turnRate: 100
   turnAtRest: 0.72
   shoppingCartSteerLoss: 0.65
   shoppingCartSlip: 0.75
   shoppingCartSlipSteerThreshold: 0.15
   cameraRelativeTurnResponsiveness: 10
-  turnRateCamminata: 400
+  turnRateCamminata: 100
   turnAtRestCamminata: 0.72
   shoppingCartSteerLossCamminata: 0.65
   shoppingCartSlipCamminata: 0.75
@@ -18379,7 +18379,7 @@ MonoBehaviour:
   movingReorientationMinSpeed: 4
   movingReorientationAccelerationFactor: 0.05
   movingReorientationBrakeStrength: 20
-  groundLateralFriction: 10
+  groundLateralFriction: 0
   airLateralFriction: 100
   driftLateralFriction: 4
   driftMinSpeed: 4
@@ -20638,7 +20638,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.33076924, y: 1.2289779, z: 0.15631603}
+  - {x: -0.33154675, y: 1.2291244, z: 0.1590058}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -20787,7 +20787,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.33016518, y: 1.2289747, z: -0.15329908}
+  - {x: -0.3299073, y: 1.229066, z: -0.15123756}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -20936,7 +20936,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.4700018, y: 0.7388354, z: 0.09436088}
+  - {x: -0.4291798, y: 0.7355438, z: 0.05054162}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -21085,7 +21085,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.45712498, y: 0.7388409, z: -0.10183162}
+  - {x: -0.44500437, y: 0.73854405, z: -0.10270168}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3

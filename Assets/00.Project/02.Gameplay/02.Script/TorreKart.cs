@@ -679,6 +679,18 @@ namespace ArcadeKart.Gameplay
                 if (pickups[i] != null)
                     Destroy(pickups[i]);
             }
+
+            // Nascondiamo lo sprite billboard animato (figlio "Sprite" del
+            // prefab): in scena serve all'oggetto vivo come icona che guarda
+            // la camera, ma sulla torre sarebbe solo rumore visivo (una fila
+            // di anelli animati), quindi disattiviamo il suo GameObject.
+            // SetActive(false) sul pivot spegne anche il quadro figlio:
+            // niente SpriteRenderer, niente billboard, niente animazione.
+            // Se il prefab assegnato non ha un figlio con quel nome non
+            // succede niente, quindi qualunque visualPrefab resta sicuro.
+            Transform spritePivot = item.transform.Find("Sprite");
+            if (spritePivot != null)
+                spritePivot.gameObject.SetActive(false);
         }
     }
 }
