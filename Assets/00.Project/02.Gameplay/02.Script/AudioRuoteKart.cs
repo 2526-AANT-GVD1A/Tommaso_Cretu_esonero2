@@ -81,7 +81,7 @@ namespace ArcadeKart.Gameplay
         [SerializeField] private float tempoVoloMinimo = 0.1f;
 
         [Header("Urto col muro")]
-        [Tooltip("Suono one-shot riprodotto quando il kart sbatte forte contro un muro/parete (fdf03fcd.s134). L'evento arriva da KartController (OnImpattoMuro), gia' filtrato dal suo impactThreshold.")]
+        [Tooltip("Suono one-shot riprodotto quando il kart sbatte forte contro un muro/parete NON di tipo ground (fdf03fcd.s134; le pareti-rampa skate su layer ground non lo triggerano). L'evento arriva da KartController (OnImpattoMuro), gia' filtrato dal suo impactThreshold.")]
         [SerializeField] private AudioClip suonoUrto;
 
         [Tooltip("AudioSource per il suono di urto; se vuoto viene creato in automatico su questo GameObject.")]

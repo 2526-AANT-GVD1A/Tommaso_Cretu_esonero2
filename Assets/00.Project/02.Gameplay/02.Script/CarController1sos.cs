@@ -359,7 +359,7 @@ namespace ArcadeKart.Core
         [SerializeField, Tooltip("Velocita' minima di urto per invocare OnImpact.")]
         private float impactThreshold = 5f;
 
-        [SerializeField, Tooltip("Soglia sulla normale di contatto per classificare un urto come 'contro un muro': normale con |y| sotto questo valore = superficie verticale (muro o parete-rampa). 0.3 = circa 72 gradi o piu'.")]
+        [SerializeField, Tooltip("Soglia sulla normale di contatto per classificare un urto come 'contro un muro': normale con |y| sotto questo valore = superficie verticale (muro o parete-rampa). 0.3 = circa 72 gradi o piu'. I contatti con collider di tipo groundLayer sono ESCLUSI (pareti-rampa skate: non contano come muri).")]
         [Range(0f, 1f)]
         private float sogliaNormaleMuro = 0.3f;
 
@@ -733,12 +733,18 @@ namespace ArcadeKart.Core
                 return;
 
             // Classificazione "muro": almeno un contatto con normale quasi
-            // orizzontale (superficie verticale). Muri veri e pareti skate
-            // matchano; atterraggi duri su terreno no (normali verso l'alto).
+            // orizzontale (superficie verticale) e NON di tipo ground. Muri
+            // veri (layer Default) matchano; le pareti-rampa skate sono su
+            // layer ground e sono escluse, come gli atterraggi duri (normali
+            // verso l'alto).
             bool controMuro = false;
             for (int i = 0; i < collision.contactCount; i++)
             {
-                if (Mathf.Abs(collision.GetContact(i).normal.y) < sogliaNormaleMuro)
+                ContactPoint contact = collision.GetContact(i);
+                bool isGroundLayer =
+                    (groundLayer.value & (1 << contact.otherCollider.gameObject.layer)) != 0;
+
+                if (!isGroundLayer && Mathf.Abs(contact.normal.y) < sogliaNormaleMuro)
                 {
                     controMuro = true;
                     break;
