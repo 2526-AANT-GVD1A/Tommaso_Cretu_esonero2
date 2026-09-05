@@ -384,6 +384,12 @@ namespace ArcadeKart.Core
         // fuori (es. AudioRuoteKart) senza duplicarne la logica.
         public float PesoCorsaFase => PesoCorsa;
 
+        // Soffitto planare COMBINATO smorzato (cap * multiplier, vedi
+        // currentPlanarMax). Esposto per la modulazione audio: il rapporto
+        // velocita'/soffitto reagisce alla velocita' REALE (cali durante
+        // inversioni/ralenti), oltre alla sola fase camminata/corsa.
+        public float SoffittoVelocitaAttuale => currentPlanarMax;
+
         // Modalita' AI: vedi tooltip di aiSteeringMode. Letta/scritta dal NPC
         // (EnemyKart) in Awake per attivare la sterzata costante. Pubblica
         // perche' deve essere leggibile anche da fuori (es. debug).

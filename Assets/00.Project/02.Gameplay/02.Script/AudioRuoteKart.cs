@@ -46,6 +46,18 @@ namespace ArcadeKart.Gameplay
         [Tooltip("Velocita' di smorzamento del blend volume/pitch e del fade in pausa. Piu' alto = transizioni piu' rapide.")]
         [SerializeField] private float velocitaTransizione = 8f;
 
+        [Header("Modulazione velocita'")]
+        [Tooltip("Se attivo, pitch e volume si modulano anche sul rapporto tra velocita' reale del kart e soffitto corrente: reagiscono alle decelerazioni (es. inversioni a 180 gradi) e alle ripartenze, oltre alla fase camminata/corsa.")]
+        [SerializeField] private bool modulaConVelocita = true;
+
+        [Tooltip("Fattore pitch a velocita' quasi nulla rispetto al soffitto: 0.6 = a kart quasi fermo il suono gira al 60% della velocita' di fase corrente.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float pitchAVelocitaZero = 0.6f;
+
+        [Tooltip("Fattore volume a velocita' quasi nulla rispetto al soffitto.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float volumeAVelocitaZero = 0.5f;
+
         // Volume corrente smorzato: governa il fade a zero quando il kart e'
         // fermo (niente tagli netti = niente click in coda al suono).
         private float volumeAttuale;
@@ -84,7 +96,22 @@ namespace ArcadeKart.Gameplay
             float volumeTarget = Mathf.Lerp(volumeCamminata, volumeCorsa, pesoCorsa);
             float pitchTarget = Mathf.Lerp(pitchCamminata, pitchCorsa, pesoCorsa);
 
-            bool inMovimento = Mathf.Abs(kart.CurrentSpeed) >= sogliaMovimento;
+            float velocitaAssoluta = Mathf.Abs(kart.CurrentSpeed);
+
+            // Modulazione sulla velocita' REALE: il rapporto con il soffitto
+            // corrente cala quando il kart decelera (es. inversioni a 180
+            // gradi) e risale quando riprende velocita', cosi' il suono segue
+            // il ritmo del kart invece di restare bloccato sui valori di fase.
+            if (modulaConVelocita)
+            {
+                float rapporto = Mathf.Clamp01(
+                    velocitaAssoluta
+                    / Mathf.Max(kart.SoffittoVelocitaAttuale, 0.01f));
+                pitchTarget *= Mathf.Lerp(pitchAVelocitaZero, 1f, rapporto);
+                volumeTarget *= Mathf.Lerp(volumeAVelocitaZero, 1f, rapporto);
+            }
+
+            bool inMovimento = velocitaAssoluta >= sogliaMovimento;
             if (!inMovimento)
                 volumeTarget = 0f;
 
