@@ -11636,7 +11636,7 @@ MonoBehaviour:
   m_enableAutoSizing: 0
   m_fontSizeMin: 0
   m_fontSizeMax: 0
-  m_fontStyle: 0
+  m_fontStyle: 1
   m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
@@ -11883,15 +11883,15 @@ RectTransform:
   m_GameObject: {fileID: 389040734}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 2.95, y: 2.95, z: 2.95}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 338622115}
   m_Father: {fileID: 1236611313}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchorMin: {x: 1, y: 0.5}
+  m_AnchorMax: {x: 1, y: 0.5}
+  m_AnchoredPosition: {x: -315, y: 69}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &389040736
@@ -12006,6 +12006,8 @@ MonoBehaviour:
   azione: 0
   scalaHover: 1.12
   velocitaScala: 12
+  ampiezzaDondolio: 5
+  oscillazioniDondolio: 2.5
   durataSaltello: 1
   ampiezzaSaltello: 22
   numeroSaltelli: 3
@@ -19903,15 +19905,15 @@ RectTransform:
   m_GameObject: {fileID: 849373850}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 2.95, y: 2.95, z: 2.95}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 979912595}
   m_Father: {fileID: 1236611313}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -61}
+  m_AnchorMin: {x: 1, y: 0.5}
+  m_AnchorMax: {x: 1, y: 0.5}
+  m_AnchoredPosition: {x: -315, y: -61}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &849373852
@@ -19932,6 +19934,8 @@ MonoBehaviour:
   azione: 0
   scalaHover: 1.12
   velocitaScala: 12
+  ampiezzaDondolio: 5
+  oscillazioniDondolio: 2.5
   durataSaltello: 1
   ampiezzaSaltello: 22
   numeroSaltelli: 3
@@ -20761,7 +20765,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.3302077, y: 1.2303048, z: 0.14239159}
+  - {x: -0.329758, y: 1.2294557, z: 0.14722832}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -20910,7 +20914,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.33293188, y: 1.2295386, z: -0.16251491}
+  - {x: -0.3319575, y: 1.2292324, z: -0.16016872}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -21059,7 +21063,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.4677154, y: 0.73887074, z: 0.0963876}
+  - {x: -0.46397844, y: 0.7388911, z: 0.098938905}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -21208,7 +21212,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.47187793, y: 0.7368897, z: -0.053595304}
+  - {x: -0.47239932, y: 0.73693526, z: -0.05422663}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -22348,7 +22352,7 @@ MonoBehaviour:
   m_enableAutoSizing: 0
   m_fontSizeMin: 0
   m_fontSizeMax: 0
-  m_fontStyle: 0
+  m_fontStyle: 1
   m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
@@ -23952,6 +23956,81 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 38.07823, y: 2.5133371, z: 12.270367}
   m_Center: {x: -1.0010376, y: 0.44850063, z: -0.6800742}
+--- !u!1 &1172624233
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1172624234}
+  - component: {fileID: 1172624236}
+  - component: {fileID: 1172624235}
+  m_Layer: 5
+  m_Name: Title
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1172624234
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1172624233}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1236611313}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 1, y: 1}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: -325, y: -209}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1172624235
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1172624233}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1172624236
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1172624233}
+  m_CullTransparentMesh: 1
 --- !u!1 &1181240706
 GameObject:
   m_ObjectHideFlags: 0
@@ -24626,6 +24705,7 @@ RectTransform:
   m_Children:
   - {fileID: 389040735}
   - {fileID: 849373851}
+  - {fileID: 1172624234}
   m_Father: {fileID: 630952206}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -37818,6 +37898,8 @@ MonoBehaviour:
   azione: 1
   scalaHover: 1.12
   velocitaScala: 12
+  ampiezzaDondolio: 5
+  oscillazioniDondolio: 2.5
   durataSaltello: 1
   ampiezzaSaltello: 22
   numeroSaltelli: 3

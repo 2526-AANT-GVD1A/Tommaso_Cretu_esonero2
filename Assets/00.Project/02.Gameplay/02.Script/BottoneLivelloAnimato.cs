@@ -38,7 +38,7 @@ namespace ArcadeKart.Gameplay
         private AzioneBottone azione = AzioneBottone.CaricaLivello;
 
         [Header("Ingrandimento al passaggio del mouse")]
-        [SerializeField, Tooltip("Scala raggiunta quando il mouse e' sopra il bottone.")]
+        [SerializeField, Tooltip("Fattore di ingrandimento relativo alla scala impostata nell'editor (1 = uguale, 1.12 = 12% piu' grande).")]
         private float scalaHover = 1.12f;
 
         [SerializeField, Tooltip("Velocita' dell'ingrandimento/riduzione.")]
@@ -74,6 +74,12 @@ namespace ArcadeKart.Gameplay
         private Vector2 posizioneBase;
         private Quaternion rotazioneBase;
 
+        // Scala impostata nell'editor (catturata in Awake): hover e ripristini
+        // lavorano come fattore moltiplicativo sopra questa base, cosi' un
+        // bottone ingrandito con lo strumento Scala dell'editor non viene
+        // riportato a scala 1 all'avvio.
+        private Vector3 scalaBase;
+
         // Stato del dondolio: tempo di hover accumulato (la fase dell'onda,
         // mantenuta se il mouse esce e rientra) e peso 0..1 che fa entrare e
         // uscire l'oscillazione in dolcezza, senza scatti.
@@ -86,6 +92,7 @@ namespace ArcadeKart.Gameplay
             rectTransform = (RectTransform)transform;
             posizioneBase = rectTransform.anchoredPosition;
             rotazioneBase = rectTransform.localRotation;
+            scalaBase = rectTransform.localScale;
         }
 
         private void OnEnable()
@@ -101,7 +108,7 @@ namespace ArcadeKart.Gameplay
             if (rectTransform != null)
             {
                 rectTransform.anchoredPosition = posizioneBase;
-                rectTransform.localScale = Vector3.one;
+                rectTransform.localScale = scalaBase;
                 rectTransform.localRotation = rotazioneBase;
             }
             if (bottone != null)
@@ -113,9 +120,14 @@ namespace ArcadeKart.Gameplay
             if (inAnimazione)
                 return;
 
-            float scalaTarget = mouseSopra ? scalaHover : 1f;
-            float scala = Mathf.Lerp(rectTransform.localScale.x, scalaTarget, Time.deltaTime * velocitaScala);
-            rectTransform.localScale = new Vector3(scala, scala, 1f);
+            // Il hover scala relativamente alla scala base disegnata
+            // nell'editor: il fattore (1 a riposo, scalaHover col mouse sopra)
+            // viene moltiplicato per scalaBase, cosi' la dimensione scelta in
+            // editor non viene sovrascritta dall'animazione.
+            float fattoreTarget = mouseSopra ? scalaHover : 1f;
+            float fattoreAttuale = rectTransform.localScale.x / Mathf.Max(0.0001f, scalaBase.x);
+            float fattore = Mathf.Lerp(fattoreAttuale, fattoreTarget, Time.deltaTime * velocitaScala);
+            rectTransform.localScale = scalaBase * fattore;
 
             AggiornaDondolio();
         }
@@ -163,7 +175,7 @@ namespace ArcadeKart.Gameplay
 
             inAnimazione = true;
             bottone.interactable = false;
-            rectTransform.localScale = Vector3.one;
+            rectTransform.localScale = scalaBase;
             rectTransform.localRotation = rotazioneBase;
 
             // Gli altri bottoni del menu diventano inselezionabili e, senza
@@ -200,7 +212,7 @@ namespace ArcadeKart.Gameplay
             if (rectTransform != null)
             {
                 rectTransform.anchoredPosition = posizioneBase;
-                rectTransform.localScale = Vector3.one;
+                rectTransform.localScale = scalaBase;
                 rectTransform.localRotation = rotazioneBase;
             }
         }
