@@ -180,6 +180,11 @@ namespace ArcadeKart.Gameplay
 
         public void OnPointerEnter(PointerEventData eventData)
         {
+            // Durante l'animazione di uscita il bottone non reagisce piu' al mouse:
+            // nessun suono di hover quando scivola sotto il cursore.
+            if (inAnimazione)
+                return;
+
             mouseSopra = true;
             RiproduciSuono(suonoHover);
         }

@@ -3469,7 +3469,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &194662169
 Transform:
   m_ObjectHideFlags: 0
@@ -21271,7 +21271,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Livello 1
+  m_text: playground
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -21298,8 +21298,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 24
-  m_fontSizeBase: 24
+  m_fontSize: 18
+  m_fontSizeBase: 18
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 0
@@ -39280,7 +39280,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.3309141, y: 1.2289972, z: 0.15688375}
+  - {x: -0.32975054, y: 1.2293733, z: 0.14787997}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -39429,7 +39429,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.3301813, y: 1.2289721, z: -0.15340185}
+  - {x: -0.3311484, y: 1.2290373, z: -0.15772642}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -39578,7 +39578,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.437606, y: 0.73824024, z: 0.10073312}
+  - {x: -0.473899, y: 0.7387145, z: 0.089666665}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -39727,7 +39727,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.44600782, y: 0.73857784, z: -0.102817945}
+  - {x: -0.47784567, y: 0.7376045, z: -0.06476636}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -41143,7 +41143,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Livello 2
+  m_text: Technical demo
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -41170,8 +41170,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 24
-  m_fontSizeBase: 24
+  m_fontSize: 17
+  m_fontSizeBase: 17
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 0
@@ -44524,17 +44524,17 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1172624233}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0.070910916, w: 0.9974827}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1236611313}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: -8.133}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -325, y: -209}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchoredPosition: {x: -315, y: -211}
+  m_SizeDelta: {x: 392.144, y: 273.974}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1172624235
 MonoBehaviour:
@@ -44556,7 +44556,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: eb1ce51ef6b0bdb92a132a6bc96695c5, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -45872,7 +45872,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1236611313
 RectTransform:
   m_ObjectHideFlags: 0
@@ -49583,7 +49583,8 @@ MonoBehaviour:
   driftSteerBoostCamminata: 1.4
   driftVisualYawDegreesCamminata: 25
   driftVisualLerpSpeedCamminata: 8
-  activeDriftToggleObjects: []
+  activeDriftToggleObjects:
+  - {fileID: 1801709292}
   activeDriftMinSpeed: 1
   activeDriftMinSteer: 0.35
   activeDriftLateralFriction: 3
@@ -49733,13 +49734,13 @@ MonoBehaviour:
     visualPrefab: {fileID: 7420827064338147709, guid: 506aec428ba843d349660c0911bb3e9b, type: 3}
     localScale: {x: 1, y: 1, z: 1}
   - visualType: T1
-    visualPrefab: {fileID: 1467688078}
+    visualPrefab: {fileID: 5945750898955557930, guid: cae6d99439e19cbf09a05e37b8f8fca6, type: 3}
     localScale: {x: 1, y: 1, z: 1}
   - visualType: T3
-    visualPrefab: {fileID: 1404365214}
+    visualPrefab: {fileID: 424554707995765832, guid: b4d7aa72327ec32c2aad916f69f57c46, type: 3}
     localScale: {x: 1, y: 1, z: 1}
   - visualType: T2
-    visualPrefab: {fileID: 1287081303}
+    visualPrefab: {fileID: 7364826140488869998, guid: 582e3fa21990464389a199827c727a89, type: 3}
     localScale: {x: 1, y: 1, z: 1}
   wobbleStiffness: 200
   wobbleDamping: 2

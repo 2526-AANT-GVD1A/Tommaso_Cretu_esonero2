@@ -530,6 +530,15 @@ namespace ArcadeKart.Gameplay
 
             SanitizeVisualClone(item);
 
+            // Instantiate preserva lo stato attivo della sorgente: se il campo
+            // visualPrefab punta a un'istanza di scena disattivata (es. essa
+            // stessa un Pickup gia' raccolto e messo in attesa di respawn) il
+            // clone nascerrebbe invisibile e il tipo sparirebbe dalla torre
+            // pur occupando uno slot. Forziamo il clone attivo: e' grafica
+            // pura, deve essere sempre visibile.
+            if (!item.activeSelf)
+                item.SetActive(true);
+
             Transform t = item.transform;
             t.localRotation = Quaternion.Euler(localEuler);
             t.localScale = entry.localScale;
