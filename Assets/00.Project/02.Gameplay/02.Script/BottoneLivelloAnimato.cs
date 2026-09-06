@@ -11,7 +11,9 @@ namespace ArcadeKart.Gameplay
         // Carica il livello all'indice scelto (bottoni del menu d'inizio).
         CaricaLivello = 0,
         // Torna al menu d'inizio (bottone del menu di fine livello).
-        TornaAlMenu = 1
+        TornaAlMenu = 1,
+        // Chiude l'applicazione (bottone "esci" del menu d'inizio).
+        EsciDalGioco = 2
     }
 
     // Abbellimento del bottone del menu: si ingrandisce e si dondola
@@ -34,7 +36,7 @@ namespace ArcadeKart.Gameplay
         [SerializeField, Tooltip("Indice del livello da caricare (usato solo se azione = CaricaLivello).")]
         private int indiceLivello;
 
-        [SerializeField, Tooltip("Cosa fare dopo l'animazione: CaricaLivello (menu d'inizio) o TornaAlMenu (menu di fine).")]
+        [SerializeField, Tooltip("Cosa fare dopo l'animazione: CaricaLivello (menu d'inizio), TornaAlMenu (menu di fine) o EsciDalGioco (bottone esci).")]
         private AzioneBottone azione = AzioneBottone.CaricaLivello;
 
         [Header("Ingrandimento al passaggio del mouse")]
@@ -309,7 +311,7 @@ namespace ArcadeKart.Gameplay
                 // chiude il proprio menu (il suo MenuControls.OnDisable
                 // riaccende i controlli del kart), POI TornaAlMenu riapre
                 // Menu_Inizio il cui MenuControls.OnEnable li rispegne. Ordine
-                // inverso lascerebbe i controlli accenti col menu aperto.
+                // inverso lascerebbe i controlli accesi col menu aperto.
                 if (oggettoMenu != null)
                     oggettoMenu.SetActive(false);
 
@@ -317,6 +319,17 @@ namespace ArcadeKart.Gameplay
                     levelManager.TornaAlMenu();
                 else
                     Debug.LogWarning("[BottoneLivelloAnimato] LevelManager non assegnato.", this);
+            }
+            else if (azione == AzioneBottone.EsciDalGioco)
+            {
+                // Bottone "esci": chiusura dell'applicazione a animazione
+                // finita. In editor Application.Quit() non ferrebbe il Play
+                // Mode: viene fermato esplicitamente; nel build eseguito il
+                // Quit chiude la finestra.
+#if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+#endif
+                Application.Quit();
             }
             else
             {
