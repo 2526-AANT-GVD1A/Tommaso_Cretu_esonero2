@@ -19497,6 +19497,114 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 305254176}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &310869119
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 310869120}
+  - component: {fileID: 310869123}
+  - component: {fileID: 310869122}
+  - component: {fileID: 310869121}
+  m_Layer: 0
+  m_Name: TriggerCOR
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &310869120
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 310869119}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -22.11, y: -2.86, z: 24.12}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 905447409}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &310869121
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 310869119}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5be23c4743057bed69abd36f6c912cb8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  phaseId: COR
+  transitionMode: 1
+  exitPhaseId: Default
+  exitTransitionMode: 1
+  requiredTag: Player
+  oneShot: 0
+  targetCamera: {fileID: 1614856960}
+  activateOnEnter:
+  - {fileID: 1796633775}
+  - {fileID: 1349275452}
+  deactivateOnEnter: []
+  activateOnExit: []
+  deactivateOnExit:
+  - {fileID: 1796633775}
+  - {fileID: 1349275452}
+--- !u!114 &310869122
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 310869119}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17332d520abef26219ba62edea3344c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  requiredTag: Player
+  oneShot: 0
+  usaReverb: 1
+  zonaReverb: {fileID: 0}
+  presetReverb: 13
+  raggioReverbInterno: 2
+  raggioReverbEsterno: 6
+  intensitaReverb: 10000
+  velocitaFadeReverb: 4
+  usaAudioBG: 1
+  sorgenteBG: {fileID: 0}
+  clipBG: {fileID: 0}
+  volumeBG: 0.056
+  velocitaFadeBG: 2
+--- !u!65 &310869123
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 310869119}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 22.478619, y: 14.628775, z: 26.39121}
+  m_Center: {x: -3.1120453, y: -6.373576, z: 11.711556}
 --- !u!1 &330463256
 GameObject:
   m_ObjectHideFlags: 0
@@ -32657,6 +32765,86 @@ Transform:
   m_Children: []
   m_Father: {fileID: 63477452}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &648182763
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 648182764}
+  - component: {fileID: 648182766}
+  - component: {fileID: 648182765}
+  m_Layer: 0
+  m_Name: Triggersala2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &648182764
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 648182763}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -50.78, y: -11.67, z: 24.12}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 905447409}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &648182765
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 648182763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17332d520abef26219ba62edea3344c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  requiredTag: Player
+  oneShot: 0
+  usaReverb: 1
+  zonaReverb: {fileID: 0}
+  presetReverb: 10
+  raggioReverbInterno: 2
+  raggioReverbEsterno: 6
+  intensitaReverb: 10000
+  velocitaFadeReverb: 4
+  usaAudioBG: 1
+  sorgenteBG: {fileID: 0}
+  clipBG: {fileID: 8300000, guid: 97c65776f5135d3d0bc64c912d6ccf61, type: 3}
+  volumeBG: 0.056
+  velocitaFadeBG: 2
+--- !u!65 &648182766
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 648182763}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 51.7189, y: 1, z: 57.498775}
+  m_Center: {x: -0.30373192, y: 0, z: 19.022718}
 --- !u!1001 &655675585
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -36254,7 +36442,10 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 2125013347}
+  - {fileID: 310869120}
+  - {fileID: 648182764}
   m_Father: {fileID: 194662169}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &905705114
@@ -36525,7 +36716,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500002, y: 1.096, z: 0.13200048}
-  - {x: -0.33121645, y: 1.2290506, z: 0.15795916}
+  - {x: -0.3380131, y: 1.2316554, z: 0.17039938}
   - {x: -0.26599985, y: 1.3933, z: 0.16755028}
   m_Parameters:
     serializedVersion: 3
@@ -36674,7 +36865,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.44500026, y: 1.096, z: -0.13199964}
-  - {x: -0.32975242, y: 1.2294064, z: -0.14761095}
+  - {x: -0.33131155, y: 1.2315129, z: -0.13784471}
   - {x: -0.2660002, y: 1.3933, z: -0.16754973}
   m_Parameters:
     serializedVersion: 3
@@ -36823,7 +37014,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.445, y: 0.88, z: 0.06600043}
-  - {x: -0.47765437, y: 0.73756754, z: 0.06412352}
+  - {x: -0.4322166, y: 0.73551375, z: 0.04819203}
   - {x: -0.45300043, y: 0.5944, z: 0.08000088}
   m_Parameters:
     serializedVersion: 3
@@ -36972,7 +37163,7 @@ LineRenderer:
   m_SortingOrder: 10
   m_Positions:
   - {x: -0.4450001, y: 0.88, z: -0.06599957}
-  - {x: -0.47363174, y: 0.73872614, z: -0.09005707}
+  - {x: -0.43640718, y: 0.7381811, z: -0.10021061}
   - {x: -0.45300055, y: 0.5944, z: -0.07999921}
   m_Parameters:
     serializedVersion: 3
@@ -48576,6 +48767,25 @@ MonoBehaviour:
     fixedZ: -2
     lookAtOffset: {x: 0, y: 1, z: 0}
     useLookAtTarget: 0
+    fixedEulerAngles: {x: 51.8, y: 46.5, z: 0}
+    fieldOfView: 65.8
+    followDamping: 5
+    lookDamping: 8
+    fovDamping: 6
+    postProcessVolume: {fileID: 1796633777}
+    volumeWeight: 1
+    volumeDamping: 100
+  - phaseId: COR
+    offset: {x: 0, y: 1, z: -3}
+    followTargetRotation: 0
+    followX: 0
+    followY: 0
+    followZ: 0
+    fixedX: -38.5
+    fixedY: 1.29
+    fixedZ: 36.6
+    lookAtOffset: {x: 0, y: 1, z: 0}
+    useLookAtTarget: 1
     fixedEulerAngles: {x: 51.8, y: 46.5, z: 0}
     fieldOfView: 65.8
     followDamping: 5
@@ -61292,6 +61502,86 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: b5184cbc33380fbe99e6f0f95cbffe51, type: 3}
   m_PrefabInstance: {fileID: 2122924816}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &2125013346
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2125013347}
+  - component: {fileID: 2125013348}
+  - component: {fileID: 2125013349}
+  m_Layer: 0
+  m_Name: Triggersala1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2125013347
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2125013346}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.74, y: -2.86, z: 24.12}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 905447409}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &2125013348
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2125013346}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 37.267708, y: 1, z: 33.50539}
+  m_Center: {x: -3.910099, y: 0, z: 8.154467}
+--- !u!114 &2125013349
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2125013346}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17332d520abef26219ba62edea3344c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  requiredTag: Player
+  oneShot: 0
+  usaReverb: 1
+  zonaReverb: {fileID: 0}
+  presetReverb: 9
+  raggioReverbInterno: 2
+  raggioReverbEsterno: 6
+  intensitaReverb: 10000
+  velocitaFadeReverb: 4
+  usaAudioBG: 1
+  sorgenteBG: {fileID: 0}
+  clipBG: {fileID: 8300000, guid: 97c65776f5135d3d0bc64c912d6ccf61, type: 3}
+  volumeBG: 0.056
+  velocitaFadeBG: 2
 --- !u!1 &2128774398
 GameObject:
   m_ObjectHideFlags: 0
