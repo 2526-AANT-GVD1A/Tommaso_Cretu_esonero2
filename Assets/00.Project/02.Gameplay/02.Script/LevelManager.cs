@@ -54,6 +54,13 @@ namespace ArcadeKart.Gameplay
 
         public IReadOnlyList<VoceLivello> Livelli => livelli;
 
+        // Stack del kart del giocatore, risolto in Awake dal kart assegnato.
+        // Esposto per chi (es. TestoPunteggioFine) deve leggere il punteggio
+        // del giocatore SENZA passare da GameObject.FindWithTag("Player"):
+        // in scena il tag Player e' su piu' oggetti (figli del kart e kart
+        // NPC), quindi il fallback per tag puo' restituire l'oggetto sbagliato.
+        public KartCollectedStack Stack => stack;
+
         // True quando il kart ha toccato il trigger di fine livello e il
         // Menu_Fine e' aperto. Serve anche a bloccare il tasto Esc finche'
         // il giocatore non decide se tornare al menu (altrimenti Esc aprirebbe

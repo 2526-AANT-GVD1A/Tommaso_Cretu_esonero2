@@ -126,9 +126,12 @@ namespace ArcadeKart.Gameplay
         public Transform StackRoot => stackRoot;
         public int ItemCount => spawnedItems.Count;
 
-        // Contatore totale degli oggetti raccolti dall'inizio della partita.
-        // Diverso da ItemCount: non cala quando la torre fa overflow (RemoveOldestItem)
-        // ne' quando si svuota con ClearAll. E' un punteggio di accumulo puro.
+        // Punteggio netto degli oggetti dall'ultimo reset: cresce ad ogni
+        // raccolta (AddCollectedItem) e cala solo quando il kart NPC nemico
+        // ruba oggetti (RemoveLastItems). NON cala per l'overflow della
+        // torre (RemoveOldestItem) ne' per ClearAll: quelle non sono
+        // perdite, solo gestione della pila visibile. E' il numero mostrato
+        // nel Menu_Fine.
         private int totalCollected;
         public int TotalCollected => totalCollected;
 
@@ -537,10 +540,10 @@ namespace ArcadeKart.Gameplay
             displayedRoll.Add(0f);
             RefreshStackLayout();
 
-            // Punteggio totale: incrementa ad ogni raccolta effettuata.
-            // Non viene decrementato quando RemoveOldestItem scarta un
-            // elemento per overflow del stack visibile ne' da ClearAll:
-            // rappresenta "quanti ne ho raccolti dall'ultimo reset", non
+            // Punteggio netto: cresce ad ogni raccolta effettuata. Non viene
+            // decrementato quando RemoveOldestItem scarta un elemento per
+            // overflow del stack visibile ne' da ClearAll: rappresenta "quanti
+            // ne ho presi e non mi sono fatti rubare dall'ultimo reset", non
             // "quanti ne ho addosso ora" (quello e' ItemCount).
             totalCollected++;
         }
@@ -583,9 +586,11 @@ namespace ArcadeKart.Gameplay
         // ultimi oggetti presi nel livello. Distrugge i cloni visivi senza
         // rilasciarli nel mondo (coerente con RemoveOldestItem, che fa lo
         // stesso per l'overflow del stack visibile). Se count eccede
-        // ItemCount, li toglie tutti. NON tocca totalCollected: quello e' un
-        // punteggio cumulativo di "quanti ne ho raccolti dall'ultimo reset",
-        // non "quanti ne ho addosso ora" (quello e' ItemCount).
+        // ItemCount, li toglie tutti. Decrementa anche totalCollected:
+        // e' un FURTO, una vera perdita per il giocatore, quindi il
+        // punteggio netto (mostrato nel Menu_Fine) deve calare. Attenzione:
+        // RemoveOldestItem (overflow della pila) NON decrementa, perche'
+        // quello non e' una perdita di punteggio, solo visiva.
         public void RemoveLastItems(int count)
         {
             if (count <= 0 || spawnedItems.Count == 0)
@@ -611,6 +616,12 @@ namespace ArcadeKart.Gameplay
                 if (item != null)
                     Destroy(item);
             }
+
+            // Punteggio netto: gli oggetti rubati dal NPC scendono dal
+            // contatore. Max(0, ...) solo per sicurezza: teoricamente la
+            // torre non puo' contenere piu' di quanto totalCollected
+            // conteggi, quindi non puo' andare in negativo da solo.
+            totalCollected = Mathf.Max(0, totalCollected - toRemove);
 
             RefreshStackLayout();
         }
